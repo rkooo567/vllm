@@ -559,13 +559,19 @@ class LLMEngine:
             return ignored
 
         # Execute the model.
-        output = self._run_workers(
-            "execute_model",
+        output = self._execute_model_dag(
             seq_group_metadata_list=seq_group_metadata_list,
             blocks_to_swap_in=scheduler_outputs.blocks_to_swap_in,
             blocks_to_swap_out=scheduler_outputs.blocks_to_swap_out,
             blocks_to_copy=scheduler_outputs.blocks_to_copy,
         )
+        # output = self._run_workers(
+        #     "execute_model",
+        #     seq_group_metadata_list=seq_group_metadata_list,
+        #     blocks_to_swap_in=scheduler_outputs.blocks_to_swap_in,
+        #     blocks_to_swap_out=scheduler_outputs.blocks_to_swap_out,
+        #     blocks_to_copy=scheduler_outputs.blocks_to_copy,
+        # )
 
         return self._process_model_outputs(output, scheduler_outputs) + ignored
 
@@ -702,6 +708,45 @@ class LLMEngine:
 
         if self.parallel_config.worker_use_ray:
             all_outputs = ray.get(all_outputs)
+
+        if get_all_outputs:
+            return all_outputs
+
+        # Make sure all workers have the same results.
+        output = all_outputs[0]
+        for other_output in all_outputs[1:]:
+            assert output == other_output
+        return output
+
+    def _execute_model_dag(
+        self,
+        seq_group_metadata_list=None,
+        blocks_to_swap_in=None,
+        blocks_to_swap_out=None,
+        blocks_to_copy=None,
+        get_all_outputs: bool = False,
+    ) -> Any:
+        """Runs the given method on all workers using static DAG APIs."""
+        from ray.dag import OutputNode, InputNode
+        assert self.parallel_config.worker_use_ray
+
+        all_outputs = []
+        with InputNode() as input_data:
+            forward_dag = OutputNode([
+                worker.execute_method.bind(
+                    "execute_model",
+                    seq_group_metadata_list=input_data.seq_group_metadata_list,
+                    blocks_to_swap_in=input_data.blocks_to_swap_in,
+                    blocks_to_swap_out=input_data.blocks_to_swap_out,
+                    blocks_to_copy=input_data.blocks_to_copy
+                ) for worker in self.workers])
+
+        all_outputs = ray.get(forward_dag.execute(
+            seq_group_metadata_list=seq_group_metadata_list,
+            blocks_to_swap_in=blocks_to_swap_in,
+            blocks_to_swap_out=blocks_to_swap_out,
+            blocks_to_copy=blocks_to_copy
+        ))
 
         if get_all_outputs:
             return all_outputs

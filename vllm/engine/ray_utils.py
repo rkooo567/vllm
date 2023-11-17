@@ -31,6 +31,7 @@ try:
             executor = getattr(self, method)
             return executor(*args, **kwargs)
 
+
 except ImportError as e:
     logger.warning(f"Failed to import Ray with {e!r}. "
                    "For distributed inference, please install Ray with "
