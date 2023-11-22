@@ -108,6 +108,7 @@ class LLMEngine:
             self._init_workers_ray(placement_group)
         else:
             self._init_workers(distributed_init_method)
+        self.forward_dag = self._init_dag()
 
         # Profile the memory usage and initialize the cache.
         self._init_cache()
@@ -718,15 +719,7 @@ class LLMEngine:
             assert output == other_output
         return output
 
-    def _execute_model_dag(
-        self,
-        seq_group_metadata_list=None,
-        blocks_to_swap_in=None,
-        blocks_to_swap_out=None,
-        blocks_to_copy=None,
-        get_all_outputs: bool = False,
-    ) -> Any:
-        """Runs the given method on all workers using static DAG APIs."""
+    def _init_dag(self):
         from ray.dag import OutputNode, InputNode
         assert self.parallel_config.worker_use_ray
 
@@ -740,8 +733,18 @@ class LLMEngine:
                     blocks_to_swap_out=input_data.blocks_to_swap_out,
                     blocks_to_copy=input_data.blocks_to_copy
                 ) for worker in self.workers])
+        return forward_dag
 
-        all_outputs = ray.get(forward_dag.execute(
+    def _execute_model_dag(
+        self,
+        seq_group_metadata_list=None,
+        blocks_to_swap_in=None,
+        blocks_to_swap_out=None,
+        blocks_to_copy=None,
+        get_all_outputs: bool = False,
+    ) -> Any:
+        """Runs the given method on all workers using static DAG APIs."""
+        all_outputs = ray.get(self.forward_dag.execute(
             seq_group_metadata_list=seq_group_metadata_list,
             blocks_to_swap_in=blocks_to_swap_in,
             blocks_to_swap_out=blocks_to_swap_out,
