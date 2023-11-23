@@ -726,12 +726,8 @@ class LLMEngine:
         all_outputs = []
         with InputNode() as input_data:
             forward_dag = OutputNode([
-                worker.execute_method.bind(
-                    "execute_model",
-                    seq_group_metadata_list=input_data.seq_group_metadata_list,
-                    blocks_to_swap_in=input_data.blocks_to_swap_in,
-                    blocks_to_swap_out=input_data.blocks_to_swap_out,
-                    blocks_to_copy=input_data.blocks_to_copy
+                worker.execute_model_remote.bind(
+                    input_data
                 ) for worker in self.workers])
         return forward_dag
 
@@ -744,18 +740,31 @@ class LLMEngine:
         get_all_outputs: bool = False,
     ) -> Any:
         """Runs the given method on all workers using static DAG APIs."""
-        all_outputs = ray.get(self.forward_dag.execute(
-            seq_group_metadata_list=seq_group_metadata_list,
-            blocks_to_swap_in=blocks_to_swap_in,
-            blocks_to_swap_out=blocks_to_swap_out,
-            blocks_to_copy=blocks_to_copy
-        ))
+        # args = {
+        #     "seq_group_metadata_list": seq_group_metadata_list,
+        #     "blocks_to_swap_in": blocks_to_swap_in,
+        #     "blocks_to_swap_out": blocks_to_swap_out,
+        #     "blocks_to_copy": blocks_to_copy
+        # }
+        # from ray import cloudpickle
+        # args = cloudpickle.dumps(args)
+        refs = self.forward_dag.execute(
+            b"hello",
+            compiled=True
+        )
+        all_outputs = ray.get(refs)
+        # all_outputs = [cloudpickle.loads(output) for output in all_outputs]
 
         if get_all_outputs:
             return all_outputs
 
         # Make sure all workers have the same results.
         output = all_outputs[0]
+        import copy
+        output = copy.deepcopy(output)
+        for ref in refs:
+            ray.release(ref)
+        print("ABCABC outoupt ", output)
         for other_output in all_outputs[1:]:
             assert output == other_output
         return output

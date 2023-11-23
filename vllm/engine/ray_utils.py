@@ -5,12 +5,12 @@ from vllm.config import ParallelConfig
 from vllm.logger import init_logger
 
 logger = init_logger(__name__)
-
 try:
     import ray
     from ray.air.util.torch_dist import TorchDistributedWorker
+    from ray.dag.compiled_dag_node import RayCompiledExecutor
 
-    class RayWorker(TorchDistributedWorker):
+    class RayWorker(TorchDistributedWorker, RayCompiledExecutor):
         """Ray wrapper for vllm.worker.Worker, allowing Worker to be
         lazliy initialized after Ray sets CUDA_VISIBLE_DEVICES."""
 
@@ -30,6 +30,15 @@ try:
         def execute_method(self, method, *args, **kwargs):
             executor = getattr(self, method)
             return executor(*args, **kwargs)
+
+        def execute_model_remote(self, args):
+            print("execute_model_remote")
+            return b"hello"
+            # from ray import cloudpickle
+            # args = cloudpickle.loads(args)
+            # output = self.execute_model(**args)
+            # print("output is ", output)
+            # return cloudpickle.dumps(output)
 
 
 except ImportError as e:
