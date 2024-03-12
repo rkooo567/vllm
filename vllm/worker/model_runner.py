@@ -151,6 +151,7 @@ class ModelRunner:
             computed_len = 0
 
             # NOTE: This only works for oooooooxxx style attention.
+            import os
             computed_block_nums = seq_group_metadata.computed_block_nums
             if computed_block_nums is not None and len(
                     computed_block_nums) > 0 and self.sliding_window is None:
@@ -158,6 +159,12 @@ class ModelRunner:
                 computed_len = len(computed_block_nums) * self.block_size
                 prompt_tokens = prompt_tokens[computed_len:]
                 prefix_block_tables.append(computed_block_nums)
+            elif os.getenv("ENABLE") is not None:
+                if seq_group_metadata.block_tables is None:
+                    prefix_block_tables.append([])
+                else:
+                    block_table = seq_group_metadata.block_tables[seq_id]
+                    prefix_block_tables.append(block_table)
             else:
                 prefix_block_tables.append([])
             # actual prompt lens
