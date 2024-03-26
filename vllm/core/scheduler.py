@@ -73,6 +73,7 @@ class SchedulerOutputs:
 
 class SchedulerDecodeOutputs:
     """Outputs of the decoding phase of the scheduler.
+
     Attributes:
         decoding_seq_groups: Selected sequence groups for decoding.
         num_preempted_seqs: The number of preempted sequences.
@@ -107,6 +108,7 @@ class SchedulerDecodeOutputs:
 
 class SchedulePrefillOutputs:
     """Outputs of the prefilling phase of the scheduler.
+
     Attributes:
         num_batched_tokens: The number of batched tokens.
         chunk_prefilling_seq_groups: Selected sequence groups for chunked
@@ -271,7 +273,7 @@ class Scheduler:
         num_batched_decoding_tokens = 0
 
         # Fix the current time.
-        now = time.time()        
+        now = time.time()
         # NOTE(woosuk): Preemption happens only when there is no available slot
         # to keep all the sequence groups in the RUNNING state.
         # In this case, the policy is responsible for deciding which sequence
@@ -371,22 +373,31 @@ class Scheduler:
             self, seq_group: SequenceGroup, token_budget: int,
             chunk_prefilling_seq_groups: List[SequenceGroup],
             prompting_seq_groups: List[SequenceGroup]) -> int:
-        """Chunked prefilling one sequence_group
+        """Chunked prefilling one sequence_group.
+
+            If a seq_group is a chunked prefill, chunk_prefilling_seq_groups
+            is updated in-place (appended). Otherwise, prompting_seq_groups is
+            updated in-place (appended).
+
         Args:
             seq_group: The sequence to be chunk prefilled.
             token_budget: The number of available token slots.
+
         Returns:
             num_tokens: The number of tokens to be prefilled from
                 the sequence group.
         """
-        num_unprefilled_tokens = seq_group.get_num_unprefilled()
-        to_advance = min(num_unprefilled_tokens, token_budget,
+        # This API is available after https://github.com/vllm-project/vllm/pull/3538 is merged.
+        num_uncomputed_tokens = seq_group.get_num_uncomputed_tokens()
+        to_advance = min(num_uncomputed_tokens, token_budget,
                          self.max_chunked_prefill_len)
 
+        # This API is available after https://github.com/vllm-project/vllm/pull/3538 is merged.
         seq_group.advance_prefill_range(to_advance)
         # If the sequence group is not fully prefilled, put it into the
         # chunked prefilling queue.
-        if seq_group.get_num_unprefilled() > 0:
+        # This API is available after https://github.com/vllm-project/vllm/pull/3538 is merged.
+        if seq_group.get_num_uncomputed_tokens() > 0:
             logger.debug(f"scheduled p -> p {seq_group.request_id}")
             chunk_prefilling_seq_groups.append(seq_group)
         else:
@@ -403,6 +414,7 @@ class Scheduler:
         Args:
             token_budget: The number of available token slots.
             num_curr_seqs: The number of sequences already scheduled.
+
         Returns:
             num_batched_tokens: The number of batched prefill tokens.
             SchedulePrefillOutputs: The outputs of the prefilling phase.
@@ -410,32 +422,31 @@ class Scheduler:
         ignored_seq_groups: List[SequenceGroup] = []
         prompting_seq_groups: List[SequenceGroup] = []
         chunk_prefilling_seq_groups: List[SequenceGroup] = []
-        num_prompting_seqs: int = 0
+        num_batched_tokens = 0
 
         # If any request in swapped state, try not schedule any prefilling.
         if self.swapped:
             return 0, SchedulePrefillOutputs(chunk_prefilling_seq_groups,
-                                          prompting_seq_groups,
-                                          ignored_seq_groups)
+                                             prompting_seq_groups,
+                                             ignored_seq_groups)
 
         # Step 1: Continue schedule those requests are in chunked prefilling.
         # This is called only if chunked prefilling is enabled.
-        while self.chunked_prefilling and token_budget.get() > 0 \
-            and num_prompting_seqs < self.scheduler_config.max_num_prompt_seqs:
-
+        while self.chunked_prefilling:
             if not self.chunked_prefill_enabled:
                 raise AssertionError(
                     "can't reach here since chunk prefill is disabled")
 
-            seq_group = self.chunked_prefilling.popleft()
+            if token_budget - num_batched_tokens <= 0:
+                break
 
+            seq_group = self.chunked_prefilling.popleft()
             num_prefilled_tokens = self._chunk_prefill_sequence_group(
                 seq_group, token_budget, chunk_prefilling_seq_groups,
                 prompting_seq_groups)
 
-            token_budget.record_prefill_tokens(num_prefilled_tokens)
+            num_batched_tokens += num_prefilled_tokens
             num_curr_seqs += seq_group.get_max_num_running_seqs()
-            num_prompting_seqs += 1
 
         # Step 2: Schedule the waiting requests for (chunked) prefilling.
         # The total number of sequences on the fly, including the
@@ -449,7 +460,6 @@ class Scheduler:
         # Optimization: We do not sort the waiting queue since the preempted
         # sequence groups are added to the front and the new sequence groups
         # are added to the back.
-        num_batched_tokens = 0
         leftover_waiting_sequences = deque()
         while self._passed_delay(time.time()) and self.waiting:
             seq_group = self.waiting[0]
@@ -501,10 +511,7 @@ class Scheduler:
                     self.waiting.popleft()
                     continue
 
-            # If the number of batched tokens exceeds the limit and
-            # chunked prefill is disabled, stop.
-            if (num_batched_tokens + num_prompt_tokens > token_budget
-                and not self.chunked_prefill_enabled):
+            if num_batched_tokens + num_prompt_tokens > token_budget:
                 break
 
             # The total number of sequences in the RUNNING state should not
@@ -525,7 +532,6 @@ class Scheduler:
 
             num_batched_tokens += num_prefilled_tokens
             num_curr_seqs += num_new_seqs
-            num_prompting_seqs += 1
 
         self.waiting.extendleft(leftover_waiting_sequences)
         if len(prompting_seq_groups) > 0:
@@ -541,7 +547,8 @@ class Scheduler:
             # Chunked prefilling is enabled.
             # We first schedule as many decoding requests as possible,
             # and then schedule chunked prefilling requests.
-            num_batched_decoding_tokens, decoding_outputs = self._schedule_decoding(token_budget)
+            num_batched_decoding_tokens, decoding_outputs = self._schedule_decoding(
+                token_budget)
 
             num_batched_prefill_tokens, prefilling_outputs = self._schedule_prefilling(
                 token_budget, decoding_outputs.num_decoding_seqs())
@@ -552,8 +559,8 @@ class Scheduler:
                 seq_group.num_seqs(status=SequenceStatus.RUNNING)
                 for seq_group in self.running)
             (num_batched_prefill_tokens,
-            prefilling_outputs) = self._schedule_prefilling(
-                token_budget, num_curr_seqs)
+             prefilling_outputs) = self._schedule_prefilling(
+                 token_budget, num_curr_seqs)
             token_budget -= num_batched_prefill_tokens
 
             if len(prefilling_outputs.prompting_seq_groups) > 0:
@@ -561,7 +568,7 @@ class Scheduler:
                 num_batched_decoding_tokens = 0
             else:
                 (num_batched_decoding_tokens,
-                decoding_outputs) = self._schedule_decoding(token_budget)
+                 decoding_outputs) = self._schedule_decoding(token_budget)
 
         num_batched_tokens = (num_batched_prefill_tokens +
                               num_batched_decoding_tokens)
