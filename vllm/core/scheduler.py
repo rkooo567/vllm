@@ -373,11 +373,14 @@ class Scheduler:
             self, seq_group: SequenceGroup, token_budget: int,
             chunk_prefilling_seq_groups: List[SequenceGroup],
             prompting_seq_groups: List[SequenceGroup]) -> int:
-        """Chunked prefilling one sequence_group.
+        """Chunk a given `seq_group` if possible.
 
-            If a seq_group is a chunked prefill, chunk_prefilling_seq_groups
-            is updated in-place (appended). Otherwise, prompting_seq_groups is
-            updated in-place (appended).
+        If a given seq_group is chunkable, this API updates states of seq_group
+        properly.
+
+        If a seq_group is a chunked prefill, chunk_prefilling_seq_groups
+        is updated in-place (appended). Otherwise, prompting_seq_groups is
+        updated in-place (appended).
 
         Args:
             seq_group: The sequence to be chunk prefilled.
