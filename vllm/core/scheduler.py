@@ -448,7 +448,7 @@ class Scheduler:
             num_batched_tokens += num_prefilled_tokens
             num_curr_seqs += seq_group.get_max_num_running_seqs()
 
-        # Step 2: Schedule the waiting requests for (chunked) prefilling.
+        # Step 2: Schedule the new requests (WAITING).
         # The total number of sequences on the fly, including the
         # requests in the generation phase.
         num_curr_seqs = sum(seq_group.get_max_num_running_seqs()
