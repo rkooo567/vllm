@@ -211,7 +211,7 @@ def destroy_model_parallel():
     _PIPELINE_GLOBAL_RANKS = None
 
     # Destroy the pynccl states if any.
-    pynccl_utils.destroy_process_group()
+    # pynccl_utils.destroy_process_group()
 
 
 # Whether to use pynccl for nccl all reduce.

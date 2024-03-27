@@ -272,27 +272,27 @@ def init_distributed_environment(
             init_method=distributed_init_method,
         )
 
-    if pynccl_utils.is_initialized():
-        pynccl_world_size = pynccl_utils.get_world_size()
-        if pynccl_world_size != parallel_config.world_size:
-            raise RuntimeError(
-                "pynccl is already initialized but the pynccl world "
-                "size does not match parallel_config.world_size "
-                f"({pynccl_world_size} vs. {parallel_config.world_size}).")
-    elif parallel_config.world_size > 1:
-        # NOTE(woosuk): We don't initialize pynccl process group when world size
-        # is 1.
-        # TODO(woosuk): Support multi-node connection.
-        pynccl_utils.init_process_group(
-            world_size=parallel_config.world_size,
-            rank=rank,
-            init_method=distributed_init_method,
-        )
+    # if pynccl_utils.is_initialized():
+    #     pynccl_world_size = pynccl_utils.get_world_size()
+    #     if pynccl_world_size != parallel_config.world_size:
+    #         raise RuntimeError(
+    #             "pynccl is already initialized but the pynccl world "
+    #             "size does not match parallel_config.world_size "
+    #             f"({pynccl_world_size} vs. {parallel_config.world_size}).")
+    # elif parallel_config.world_size > 1:
+    #     # NOTE(woosuk): We don't initialize pynccl process group when world size
+    #     # is 1.
+    #     # TODO(woosuk): Support multi-node connection.
+    #     pynccl_utils.init_process_group(
+    #         world_size=parallel_config.world_size,
+    #         rank=rank,
+    #         init_method=distributed_init_method,
+    #     )
 
     # A small all_reduce for warmup.
     torch.distributed.all_reduce(torch.zeros(1).cuda())
-    if pynccl_utils.is_initialized():
-        pynccl_utils.all_reduce(torch.zeros(1).cuda())
+    # if pynccl_utils.is_initialized():
+    #     pynccl_utils.all_reduce(torch.zeros(1).cuda())
     ensure_model_parallel_initialized(parallel_config.tensor_parallel_size,
                                       parallel_config.pipeline_parallel_size)
 

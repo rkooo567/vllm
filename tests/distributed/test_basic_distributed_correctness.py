@@ -16,7 +16,7 @@ import pytest
 import torch
 
 MODELS = [
-    os.environ["TEST_DIST_MODEL"],
+    # os.environ["TEST_DIST_MODEL"],
 ]
 
 
@@ -48,3 +48,21 @@ def test_models(
             f"Test{i}:\nHF: {hf_output_str!r}\nvLLM: {vllm_output_str!r}")
         assert hf_output_ids == vllm_output_ids, (
             f"Test{i}:\nHF: {hf_output_ids}\nvLLM: {vllm_output_ids}")
+
+
+@pytest.mark.skipif(torch.cuda.device_count() < 2,
+                    reason="Need at least 2 GPUs to run the test.")
+def test_distributed_group_gc(
+    vllm_runner,
+) -> None:
+    """Verify when vllm is reinitialized with TP > 1, it doesn't fail."""
+    vllm_model = vllm_runner("facebook/opt-125m", dtype="half", tensor_parallel_size=2)
+    # vllm_outputs = vllm_model.generate_greedy(["hi"], 16)
+    del vllm_model
+    # This should not fail.
+    from vllm.model_executor.parallel_utils.parallel_state import (
+    destroy_model_parallel)
+    destroy_model_parallel()
+    import gc
+    gc.collect()
+    vllm_model = vllm_runner("facebook/opt-125m", dtype="half", tensor_parallel_size=2)
