@@ -4,6 +4,7 @@
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
 """Tensor and pipeline parallel groups."""
 import contextlib
+from typing import Optional
 
 import torch
 
@@ -13,15 +14,19 @@ from vllm.model_executor.parallel_utils import pynccl_utils
 _TENSOR_MODEL_PARALLEL_GROUP = None
 # Pipeline model parallel group that the current rank belongs to.
 _PIPELINE_MODEL_PARALLEL_GROUP = None
+# Stage parallel group that the current rank belongs to.
+_STAGE_PARALLEL_GROUP = None
 
 # A list of global ranks for each pipeline group to ease calculation of the
 # source rank when broadcasting from the first or last pipeline stage.
 _PIPELINE_GLOBAL_RANKS = None
+_STAGE_GLOBAL_RANKS  = None
 
 
 def initialize_model_parallel(
     tensor_model_parallel_size: int = 1,
     pipeline_model_parallel_size: int = 1,
+    enable_prefill_disagg: bool = False,
 ) -> None:
     """
     Initialize model parallel groups.
@@ -69,26 +74,38 @@ def initialize_model_parallel(
     for i in range(num_tensor_model_parallel_groups):
         ranks = range(i * tensor_model_parallel_size,
                       (i + 1) * tensor_model_parallel_size)
+        print("SANG-TODO", ranks)
         group = torch.distributed.new_group(ranks)
         if rank in ranks:
+            print("SANG-TODO group setting group", group)
             _TENSOR_MODEL_PARALLEL_GROUP = group
+    print("SANG-TODO group setting done")
 
     # Build the pipeline model-parallel groups.
     global _PIPELINE_MODEL_PARALLEL_GROUP
     global _PIPELINE_GLOBAL_RANKS
+
+    # global _STAGE_PARALLEL_GROUP
+
     assert _PIPELINE_MODEL_PARALLEL_GROUP is None, (
         "pipeline model parallel group is already initialized")
     for i in range(num_pipeline_model_parallel_groups):
-        ranks = range(i, world_size, num_pipeline_model_parallel_groups)
+        ranks = range(world_size, num_pipeline_model_parallel_groups)
+        print("SANG-TODO pp ranks", ranks)
         group = torch.distributed.new_group(ranks)
         if rank in ranks:
             _PIPELINE_MODEL_PARALLEL_GROUP = group
             _PIPELINE_GLOBAL_RANKS = ranks
+    
+    if enable_prefill_disagg:
+        _STAGE_PARALLEL_GROUP = _PIPELINE_MODEL_PARALLEL_GROUP
+        _STAGE_GLOBAL_RANKS = _PIPELINE_GLOBAL_RANKS
 
 
 def ensure_model_parallel_initialized(
     tensor_model_parallel_size: int,
     pipeline_model_parallel_size: int,
+    enable_prefill_disagg: bool = False,
 ) -> None:
     """Helper to initialize model parallel groups if they are not initialized,
     or ensure tensor-parallel and pipeline-parallel sizes are equal to expected
@@ -96,8 +113,8 @@ def ensure_model_parallel_initialized(
     """
     if not model_parallel_is_initialized():
         initialize_model_parallel(tensor_model_parallel_size,
-                                  pipeline_model_parallel_size)
-        return
+                                  pipeline_model_parallel_size,
+                                  enable_prefill_disagg)
 
     assert (
         get_tensor_model_parallel_world_size() == tensor_model_parallel_size
@@ -109,6 +126,9 @@ def ensure_model_parallel_initialized(
         "pipeline parallel group already initialized, but of unexpected size: "
         f"{get_pipeline_model_parallel_world_size()=} vs. "
         f"{pipeline_model_parallel_size=}")
+    assert (
+        get_tensor_model_parallel_world_size() == tensor_model_parallel_size
+    )
 
 
 def model_parallel_is_initialized():
@@ -131,6 +151,11 @@ def get_pipeline_model_parallel_group():
     return _PIPELINE_MODEL_PARALLEL_GROUP
 
 
+def get_stage_parallel_group():
+    # SANG-TODO docstring
+    return _STAGE_PARALLEL_GROUP
+
+
 def get_tensor_model_parallel_world_size():
     """Return world size for the tensor model parallel group."""
     return torch.distributed.get_world_size(
@@ -143,6 +168,10 @@ def get_pipeline_model_parallel_world_size():
         group=get_pipeline_model_parallel_group())
 
 
+def get_stage_parallel_world_size():
+    return torch.distributed.get_world_size(group=get_stage_parallel_group())
+
+
 def get_tensor_model_parallel_rank():
     """Return my rank for the tensor model parallel group."""
     return torch.distributed.get_rank(group=get_tensor_model_parallel_group())
@@ -152,6 +181,11 @@ def get_pipeline_model_parallel_rank():
     """Return my rank for the pipeline model parallel group."""
     return torch.distributed.get_rank(
         group=get_pipeline_model_parallel_group())
+
+
+def get_stage_parallel_rank():
+    return torch.distributed.get_rank(
+        group=get_stage_parallel_group())
 
 
 def get_tensor_model_parallel_src_rank():
@@ -197,6 +231,24 @@ def get_pipeline_model_parallel_prev_rank():
     return _PIPELINE_GLOBAL_RANKS[(rank_in_pipeline - 1) % world_size]
 
 
+def get_stage_model_parallel_next_rank():
+    assert _STAGE_GLOBAL_RANKS is not None, (
+        "Pipeline parallel group is not initialized")
+    rank_in_stage = get_stage_parallel_rank()
+    world_size = get_stage_parallel_world_size()
+    return _STAGE_GLOBAL_RANKS[(rank_in_stage + 1) % world_size]
+
+
+def get_stage_model_parallel_prev_rank():
+    assert _STAGE_GLOBAL_RANKS is not None, (
+        "Pipeline parallel group is not initialized")
+    rank_in_stage = get_stage_parallel_rank()
+    world_size = get_stage_parallel_world_size()
+    return _STAGE_GLOBAL_RANKS[(rank_in_stage - 1) % world_size]
+
+
+
+
 def destroy_model_parallel():
     """Set the groups to none and destroy them."""
     global _TENSOR_MODEL_PARALLEL_GROUP
@@ -207,8 +259,14 @@ def destroy_model_parallel():
     if _PIPELINE_MODEL_PARALLEL_GROUP:
         torch.distributed.destroy_process_group(_PIPELINE_MODEL_PARALLEL_GROUP)
     _PIPELINE_MODEL_PARALLEL_GROUP = None
+    global _STAGE_PARALLEL_GROUP
+    if _STAGE_PARALLEL_GROUP:
+        torch.distributed.destroy_process_group(_STAGE_PARALLEL_GROUP)
+    _STAGE_PARALLEL_GROUP = None
     global _PIPELINE_GLOBAL_RANKS
     _PIPELINE_GLOBAL_RANKS = None
+    global _STAGE_GLOBAL_RANKS
+    _STAGE_GLOBAL_RANKS = None
 
     # Destroy the pynccl states if any.
     pynccl_utils.destroy_process_group()

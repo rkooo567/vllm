@@ -10,29 +10,29 @@ from vllm.sequence import (Sequence, SequenceGroup, SequenceStatus)
 logger = init_logger(__name__)
 
 
-class DisaggScheduleOutputs:
+# class DisaggScheduleOutputs:
 
-    def __init__(
-        self,
-        prefill_schedule=None,
-        decode_schedule=None,
-        send_blocks=None,
-        recv_blocks=None,
-    ):
-        self.prefill_schedule = prefill_schedule or (
-            [], SchedulerOutputs.create_empty())
-        self.decode_schedule = decode_schedule or (
-            [], SchedulerOutputs.create_empty())
-        self.send_blocks = send_blocks or []
-        self.recv_blocks = recv_blocks or []
+#     def __init__(
+#         self,
+#         prefill_schedule=None,
+#         decode_schedule=None,
+#         send_blocks=None,
+#         recv_blocks=None,
+#     ):
+#         self.prefill_schedule = prefill_schedule or (
+#             [], SchedulerOutputs.create_empty())
+#         self.decode_schedule = decode_schedule or (
+#             [], SchedulerOutputs.create_empty())
+#         self.send_blocks = send_blocks or []
+#         self.recv_blocks = recv_blocks or []
 
-    @property
-    def has_prefill(self):
-        return self.prefill_schedule[0] or self.send_blocks
+#     @property
+#     def has_prefill(self):
+#         return self.prefill_schedule[0] or self.send_blocks
 
-    @property
-    def has_decode(self):
-        return self.decode_schedule[0] or self.recv_blocks
+#     @property
+#     def has_decode(self):
+#         return self.decode_schedule[0] or self.recv_blocks
 
 
 class DisaggScheduler:
