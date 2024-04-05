@@ -3,7 +3,7 @@ from typing import Dict, List, Optional
 from vllm.config import (CacheConfig, DeviceConfig, LoRAConfig, ModelConfig,
                          ParallelConfig, SchedulerConfig, SpeculativeConfig,
                          VisionLanguageConfig)
-from vllm.executor.executor_base import ExecutorAsyncBase, ExecutorBase
+from vllm.executor.executor_base import ExecutorAsyncBase, ExecutorBase, ExecutorMode
 from vllm.executor.utils import check_block_size_valid
 from vllm.logger import init_logger
 from vllm.lora.request import LoRARequest
@@ -26,6 +26,7 @@ class GPUExecutor(ExecutorBase):
         lora_config: Optional[LoRAConfig],
         vision_language_config: Optional[VisionLanguageConfig],
         speculative_config: Optional[SpeculativeConfig],
+        executor_mode: ExecutorMode = ExecutorMode.MIXED,
     ) -> None:
         self.model_config = model_config
         self.cache_config = cache_config
@@ -34,6 +35,7 @@ class GPUExecutor(ExecutorBase):
         self.scheduler_config = scheduler_config
         self.device_config = device_config
         self.vision_language_config = vision_language_config
+        self.executor_mode = executor_mode
 
         assert (not speculative_config
                 ), "Speculative decoding not yet supported for GPU backend"
@@ -43,6 +45,9 @@ class GPUExecutor(ExecutorBase):
 
         # Profile the memory usage and initialize the cache.
         self._init_cache()
+
+    def mode(self):
+        return self.executor_mode
 
     def _init_worker(self):
         # Lazy import the Worker to avoid importing torch.cuda/xformers

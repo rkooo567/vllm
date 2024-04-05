@@ -116,16 +116,18 @@ class LLMEngine:
         self.detokenizer = Detokenizer(self.tokenizer)
         self.seq_counter = Counter()
 
-        self.model_executor = executor_class(
-            model_config=model_config,
-            cache_config=cache_config,
-            parallel_config=parallel_config,
-            scheduler_config=scheduler_config,
-            device_config=device_config,
-            lora_config=lora_config,
-            vision_language_config=vision_language_config,
-            speculative_config=speculative_config,
-        )
+        self.model_executors: List[ExecutorBase] = [
+            executor_class(
+                model_config=model_config,
+                cache_config=cache_config,
+                parallel_config=parallel_config,
+                scheduler_config=scheduler_config,
+                device_config=device_config,
+                lora_config=lora_config,
+                vision_language_config=vision_language_config,
+                speculative_config=speculative_config,
+            )
+        ]
 
         # If usage stat is enabled, collect relevant info.
         if is_usage_stats_enabled():
@@ -169,6 +171,7 @@ class LLMEngine:
         # Create the scheduler.
         # NOTE: the cache_config here have been updated with the numbers of
         # GPU and CPU blocks, which are profiled in the distributed executor.
+        # SANG-TODO cache_config is per scheduler / executor.
         self.scheduler = Scheduler(scheduler_config, cache_config, lora_config)
 
         # Metric Logging.
@@ -177,6 +180,10 @@ class LLMEngine:
                 local_interval=_LOCAL_LOGGING_INTERVAL_SEC,
                 labels=dict(model_name=model_config.model))
             self.stat_logger.info("cache_config", self.cache_config)
+
+    @property
+    def model_executor(self):
+        return self.model_executors[0]
 
     @classmethod
     def from_engine_args(
