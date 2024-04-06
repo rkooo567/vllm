@@ -9,7 +9,7 @@ from vllm.config import (CacheConfig, DeviceConfig, LoRAConfig, ModelConfig,
                          ParallelConfig, SchedulerConfig, SpeculativeConfig,
                          VisionLanguageConfig)
 from vllm.engine.ray_utils import RayWorkerVllm, ray
-from vllm.executor.executor_base import ExecutorAsyncBase, ExecutorBase, ExecutorMode
+from vllm.executor.executor_base import ExecutorAsyncBase, ExecutorBase
 from vllm.executor.utils import check_block_size_valid
 from vllm.logger import init_logger
 from vllm.lora.request import LoRARequest
@@ -43,7 +43,6 @@ class RayGPUExecutor(ExecutorBase):
         lora_config: Optional[LoRAConfig],
         vision_language_config: Optional[VisionLanguageConfig],
         speculative_config: Optional[SpeculativeConfig],
-        executor_mode: ExecutorMode = ExecutorMode.MIXED,
     ) -> None:
         self.model_config = model_config
         self.cache_config = cache_config
@@ -52,12 +51,12 @@ class RayGPUExecutor(ExecutorBase):
         self.scheduler_config = scheduler_config
         self.device_config = device_config
         self.vision_language_config = vision_language_config
-        self.executor_mode = executor_mode
         assert (not speculative_config
                 ), "Speculative decoding not yet supported for RayGPU backend."
 
         assert self.parallel_config.worker_use_ray
         placement_group = self.parallel_config.placement_group
+        # SANG-TODO parallel config should be applied per worker groups
 
         # Disable Ray usage stats collection.
         ray_usage = os.environ.get("RAY_USAGE_STATS_ENABLED", "0")
@@ -73,9 +72,6 @@ class RayGPUExecutor(ExecutorBase):
         self.forward_dag = None
         if USE_RAY_COMPILED_DAG:
             self.forward_dag = self._compiled_ray_dag()
-
-    def mode(self):
-        return self.executor_mode
 
     def _init_workers_ray(self, placement_group: "PlacementGroup",
                           **ray_remote_kwargs):
@@ -143,7 +139,6 @@ class RayGPUExecutor(ExecutorBase):
             node_gpus[node_id] = sorted(gpu_ids)
 
         # Set CUDA_VISIBLE_DEVICES for the driver and workers.
-        print("SANG-TODO set cuda visible devices from an executor ", self.mode)
         set_cuda_visible_devices(node_gpus[driver_node_id])
         for worker, (node_id, _) in zip(self.workers, worker_node_and_gpu_ids):
             worker.set_cuda_visible_devices.remote(node_gpus[node_id])

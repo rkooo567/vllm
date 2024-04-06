@@ -8,12 +8,6 @@ from vllm.config import (CacheConfig, DeviceConfig, LoRAConfig, ModelConfig,
 from vllm.lora.request import LoRARequest
 from vllm.sequence import SamplerOutput, SequenceGroupMetadata
 
-class ExecutorMode(enum.Enum):
-    """Status of a sequence."""
-    PREFILL_ONLY = enum.auto()
-    DECODE_ONLY = enum.auto()
-    MIXED = enum.auto()
-
 
 class ExecutorBase(ABC):
     """Base class for all executors.
@@ -34,13 +28,8 @@ class ExecutorBase(ABC):
         lora_config: Optional[LoRAConfig],
         vision_language_config: Optional[VisionLanguageConfig],
         speculative_config: Optional[SpeculativeConfig],
-        executor_mode: ExecutorMode = ExecutorMode.MIXED,
     ) -> None:
         raise NotImplementedError
-
-    @abstractmethod
-    def mode(self):
-        pass
 
     @abstractmethod
     def execute_model(self,

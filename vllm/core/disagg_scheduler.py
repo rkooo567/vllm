@@ -207,7 +207,7 @@ class DisaggScheduler:
                 self.transfering_request_ids)
         self.transfering_request_ids = None
 
-    def schedule(self):
+    def schedule(self) -> SchedulerOutputs:
         if self.decoding and self.prefilling:
             return DisaggScheduleOutputs()
 

@@ -12,7 +12,7 @@ from vllm.core.disagg_scheduler import DisaggScheduler
 from vllm.engine.arg_utils import EngineArgs
 from vllm.engine.metrics import StatLogger, Stats
 from vllm.engine.ray_utils import initialize_ray_cluster
-from vllm.executor.executor_base import ExecutorBase, ExecutorMode
+from vllm.executor.executor_base import ExecutorBase
 from vllm.logger import init_logger
 from vllm.lora.request import LoRARequest
 from vllm.outputs import RequestOutput
@@ -117,8 +117,7 @@ class LLMEngine:
         self.detokenizer = Detokenizer(self.tokenizer)
         self.seq_counter = Counter()
 
-        self.model_executors: List[ExecutorBase] = self._initialize_model_executors(
-            executor_class=executor_class,
+        self.model_executor: ExecutorBase = executor_class(
             model_config=model_config,
             cache_config=cache_config,
             parallel_config=parallel_config,
@@ -172,7 +171,7 @@ class LLMEngine:
         # NOTE: the cache_config here have been updated with the numbers of
         # GPU and CPU blocks, which are profiled in the distributed executor.
         # SANG-TODO cache_config is per scheduler / executor.
-        if scheduler_config.enable_disaggregated_prefill:
+        if parallel_config.enable_disaggregated_prefill:
             self.scheduler = DisaggScheduler(scheduler_config, cache_config, lora_config)
         else:
             self.scheduler = Scheduler(scheduler_config, cache_config, lora_config)
@@ -183,10 +182,6 @@ class LLMEngine:
                 local_interval=_LOCAL_LOGGING_INTERVAL_SEC,
                 labels=dict(model_name=model_config.model))
             self.stat_logger.info("cache_config", self.cache_config)
-
-    @property
-    def model_executor(self):
-        return self.model_executors[0]
 
     @classmethod
     def from_engine_args(
@@ -694,7 +689,7 @@ class LLMEngine:
             >>>     if not (engine.has_unfinished_requests() or example_inputs):
             >>>         break
         """
-        if self.scheduler_config.enable_disaggregated_prefill:
+        if self.parallel_config.enable_disaggregated_prefill:
             return self.step_disagg()
 
         seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
@@ -864,52 +859,3 @@ class LLMEngine:
     def check_health(self) -> None:
         self.model_executor.check_health()
 
-    def _initialize_model_executors(
-            self,
-            executor_class,
-            model_config,
-            cache_config,
-            parallel_config,
-            scheduler_config,
-            device_config,
-            lora_config,
-            vision_language_config,
-            speculative_config) -> List[ExecutorBase]:
-        if scheduler_config.enable_disaggregated_prefill:
-            return [
-                executor_class(
-                    model_config=model_config,
-                    cache_config=cache_config,
-                    parallel_config=parallel_config,
-                    scheduler_config=scheduler_config,
-                    device_config=device_config,
-                    lora_config=lora_config,
-                    vision_language_config=vision_language_config,
-                    speculative_config=speculative_config,
-                    executor_mode=ExecutorMode.PREFILL_ONLY
-                ),
-                executor_class(
-                    model_config=model_config,
-                    cache_config=cache_config,
-                    parallel_config=parallel_config,
-                    scheduler_config=scheduler_config,
-                    device_config=device_config,
-                    lora_config=lora_config,
-                    vision_language_config=vision_language_config,
-                    speculative_config=speculative_config,
-                    executor_mode=ExecutorMode.DECODE_ONLY
-                ),
-            ]
-        else:
-            return [
-                executor_class(
-                    model_config=model_config,
-                    cache_config=cache_config,
-                    parallel_config=parallel_config,
-                    scheduler_config=scheduler_config,
-                    device_config=device_config,
-                    lora_config=lora_config,
-                    vision_language_config=vision_language_config,
-                    speculative_config=speculative_config,
-                )
-            ]

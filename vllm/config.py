@@ -494,6 +494,7 @@ class ParallelConfig:
         tokenizer_pool_config: Optional[TokenizerPoolConfig] = None,
         ray_workers_use_nsight: bool = False,
         placement_group: Optional["PlacementGroup"] = None,
+        enable_disaggregated_prefill: bool = False,
     ) -> None:
         self.pipeline_parallel_size = pipeline_parallel_size
         self.tensor_parallel_size = tensor_parallel_size
@@ -503,6 +504,7 @@ class ParallelConfig:
         self.tokenizer_pool_config = tokenizer_pool_config
         self.ray_workers_use_nsight = ray_workers_use_nsight
         self.placement_group = placement_group
+        self.enable_disaggregated_prefill = enable_disaggregated_prefill
 
         self.world_size = pipeline_parallel_size * self.tensor_parallel_size
         if self.world_size > 1:
@@ -548,7 +550,6 @@ class SchedulerConfig:
             prompt latency) before scheduling next prompt.
         enable_chunked_prefill: If True, prefill requests can be chunked based
             on the remaining max_num_batched_tokens.
-        SANG-TODO enable_disaggregated_prefill
     """
 
     def __init__(
@@ -560,7 +561,6 @@ class SchedulerConfig:
         num_lookahead_slots: int = 0,
         delay_factor: float = 0.0,
         enable_chunked_prefill: bool = False,
-        enable_disaggregated_prefill: bool = False,
     ) -> None:
         if max_num_batched_tokens is not None:
             self.max_num_batched_tokens = max_num_batched_tokens
@@ -574,7 +574,6 @@ class SchedulerConfig:
         self.num_lookahead_slots = num_lookahead_slots
         self.delay_factor = delay_factor
         self.chunked_prefill_enabled = enable_chunked_prefill
-        self.enable_disaggregated_prefill = enable_disaggregated_prefill
 
         self._verify_args()
 

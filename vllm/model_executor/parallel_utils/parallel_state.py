@@ -26,7 +26,7 @@ _STAGE_GLOBAL_RANKS  = None
 def initialize_model_parallel(
     tensor_model_parallel_size: int = 1,
     pipeline_model_parallel_size: int = 1,
-    enable_prefill_disagg: bool = False,
+    enable_disaggregated_prefill: bool = False,
 ) -> None:
     """
     Initialize model parallel groups.
@@ -53,9 +53,10 @@ def initialize_model_parallel(
     # Get world size and rank. Ensure some consistencies.
     assert torch.distributed.is_initialized()
     world_size: int = torch.distributed.get_world_size()
-
+    stage_size = 2 if enable_disaggregated_prefill else 1
+    # SANG-TODO update error msg.
     if (world_size !=
-            tensor_model_parallel_size * pipeline_model_parallel_size):
+            tensor_model_parallel_size * pipeline_model_parallel_size * stage_size):
         raise RuntimeError(
             f"world_size ({world_size}) is not equal to "
             f"tensor_model_parallel_size ({tensor_model_parallel_size}) x "
@@ -84,28 +85,34 @@ def initialize_model_parallel(
     # Build the pipeline model-parallel groups.
     global _PIPELINE_MODEL_PARALLEL_GROUP
     global _PIPELINE_GLOBAL_RANKS
-
-    # global _STAGE_PARALLEL_GROUP
+    global _STAGE_PARALLEL_GROUP
+    global _STAGE_GLOBAL_RANKS
 
     assert _PIPELINE_MODEL_PARALLEL_GROUP is None, (
         "pipeline model parallel group is already initialized")
     for i in range(num_pipeline_model_parallel_groups):
-        ranks = range(world_size, num_pipeline_model_parallel_groups)
-        print("SANG-TODO pp ranks", ranks)
+        ranks = range(0, world_size, num_pipeline_model_parallel_groups)
         group = torch.distributed.new_group(ranks)
         if rank in ranks:
             _PIPELINE_MODEL_PARALLEL_GROUP = group
             _PIPELINE_GLOBAL_RANKS = ranks
-    
-    if enable_prefill_disagg:
-        _STAGE_PARALLEL_GROUP = _PIPELINE_MODEL_PARALLEL_GROUP
-        _STAGE_GLOBAL_RANKS = _PIPELINE_GLOBAL_RANKS
+
+    if enable_disaggregated_prefill:
+        num_stage_parallel_group: int = (world_size // 2)
+        # SANG-TODO Allow to do M:N mapping.
+        assert pipeline_model_parallel_size == 1
+        for i in range(num_stage_parallel_group):
+            ranks = range(0, world_size, num_stage_parallel_group)
+            group = torch.distributed.new_group(ranks)
+            if rank in ranks:
+                _STAGE_PARALLEL_GROUP = group
+                _STAGE_GLOBAL_RANKS = ranks
 
 
 def ensure_model_parallel_initialized(
     tensor_model_parallel_size: int,
     pipeline_model_parallel_size: int,
-    enable_prefill_disagg: bool = False,
+    enable_disaggregated_prefill: bool = False,
 ) -> None:
     """Helper to initialize model parallel groups if they are not initialized,
     or ensure tensor-parallel and pipeline-parallel sizes are equal to expected
@@ -114,7 +121,8 @@ def ensure_model_parallel_initialized(
     if not model_parallel_is_initialized():
         initialize_model_parallel(tensor_model_parallel_size,
                                   pipeline_model_parallel_size,
-                                  enable_prefill_disagg)
+                                  enable_disaggregated_prefill)
+        return
 
     assert (
         get_tensor_model_parallel_world_size() == tensor_model_parallel_size
@@ -233,7 +241,7 @@ def get_pipeline_model_parallel_prev_rank():
 
 def get_stage_model_parallel_next_rank():
     assert _STAGE_GLOBAL_RANKS is not None, (
-        "Pipeline parallel group is not initialized")
+        "Stage parallel group is not initialized")
     rank_in_stage = get_stage_parallel_rank()
     world_size = get_stage_parallel_world_size()
     return _STAGE_GLOBAL_RANKS[(rank_in_stage + 1) % world_size]
@@ -241,7 +249,7 @@ def get_stage_model_parallel_next_rank():
 
 def get_stage_model_parallel_prev_rank():
     assert _STAGE_GLOBAL_RANKS is not None, (
-        "Pipeline parallel group is not initialized")
+        "Stage parallel group is not initialized")
     rank_in_stage = get_stage_parallel_rank()
     world_size = get_stage_parallel_world_size()
     return _STAGE_GLOBAL_RANKS[(rank_in_stage - 1) % world_size]

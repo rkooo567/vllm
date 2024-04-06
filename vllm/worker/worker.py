@@ -296,7 +296,8 @@ def init_distributed_environment(
     if pynccl_utils.is_initialized():
         pynccl_utils.all_reduce(torch.zeros(1).cuda())
     ensure_model_parallel_initialized(parallel_config.tensor_parallel_size,
-                                      parallel_config.pipeline_parallel_size)
+                                      parallel_config.pipeline_parallel_size,
+                                      parallel_config.enable_disaggregated_prefill,)
 
     # Initialize a custom fast all-reduce implementation.
     if not parallel_config.disable_custom_all_reduce:

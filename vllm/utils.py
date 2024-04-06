@@ -233,7 +233,6 @@ def get_open_port() -> int:
 
 
 def set_cuda_visible_devices(device_ids: List[int]) -> None:
-    print("SANG-TODO set cuda visible devices: ", ",".join(map(str, device_ids)))
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, device_ids))
 
 

@@ -1,5 +1,5 @@
 """CacheEngine class for managing the KV cache."""
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import torch
 
@@ -51,6 +51,10 @@ class CacheEngine:
         # Initialize the cache.
         self.gpu_cache = self._allocate_kv_cache(self.num_gpu_blocks, "cuda")
         self.cpu_cache = self._allocate_kv_cache(self.num_cpu_blocks, "cpu")
+
+    def _get_kv_cache_shape(self):
+        return self.attn_backend.get_kv_cache_shape(
+            self.num_gpu_blocks, self.block_size, self.num_heads, self.head_size)
 
     def _allocate_kv_cache(
         self,
@@ -104,6 +108,11 @@ class CacheEngine:
         dtype_size = _get_dtype_size(dtype)
         return dtype_size * total
 
+    def _get_kv_cache_to_send_recv(self, layer_idx) -> Tuple[torch.Tensor, torch.Tensor, Tuple[int]]:
+        key_cache = self.gpu_cache[layer_idx][0]
+        value_cache = self.gpu_cache[layer_idx][1]
+        return key_cache, value_cache
+
     def send_blocks(self, block_ids: List[int]) -> None:
         # torch futures.
         reqs = []
@@ -111,12 +120,12 @@ class CacheEngine:
         values: List[torch.Tensor] = []
         for block_id in block_ids:
             for i in range(self.num_layers):
-                keys.append(self.gpu_cache[i][0][block_id])
-                values.append(self.gpu_cache[i][1][block_id])
+                key_cache, value_cache = self._get_kv_cache_to_send_recv(i)
+                keys.append(key_cache[block_id])
+                values.append(value_cache[block_id])
 
         key_tensor = torch.stack(tuple(keys))
         value_tensor = torch.stack(tuple(values))
-
         reqs.append(
             torch.distributed.isend(
                 key_tensor, dst=get_stage_model_parallel_next_rank()))
@@ -126,18 +135,21 @@ class CacheEngine:
         return reqs
 
     def recv_blocks(self, block_ids: List[int]) -> None:
+        kv_cache_shape = self.attn_backend.get_kv_cache_shape(
+            self.num_gpu_blocks, self.block_size, self.num_heads, self.head_size)
         reqs = []
+        # SANG-TODO hacky fix it.
         key_tensor: torch.Tensor = torch.empty(
             size=(self.num_layers * len(block_ids),
-                  *self.get_key_block_shape()),
+                  *kv_cache_shape[2:]),
             dtype=self.dtype,
-            device=self.gpu_cache[0][0].device,
+            device=self.gpu_cache[0].device,
         )
         value_tensor: torch.Tensor = torch.empty(
             size=(self.num_layers * len(block_ids),
-                  *self.get_value_block_shape()),
+                  *kv_cache_shape[2:]),
             dtype=self.dtype,
-            device=self.gpu_cache[0][0].device,
+            device=self.gpu_cache[0].device,
         )
 
         reqs.append(
