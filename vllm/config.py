@@ -158,7 +158,9 @@ class ModelConfig:
 
         # TODO: Remove this check once HF updates the pt weights of Mixtral.
         architectures = getattr(self.hf_config, "architectures", [])
-        if "MixtralForCausalLM" in architectures and load_format == "pt":
+        # architectures can be None instead of []
+        if architectures and "MixtralForCausalLM" in architectures \
+            and load_format == "pt":
             raise ValueError(
                 "Currently, the 'pt' format is not supported for Mixtral. "
                 "Please use the 'safetensors' format instead. ")
@@ -334,7 +336,7 @@ class CacheConfig:
             vLLM execution.
         swap_space: Size of the CPU swap space per GPU (in GiB).
         cache_dtype: Data type for kv cache storage.
-        forced_num_gpu_blocks: Number of GPU blocks to use. This overrides the
+        num_gpu_blocks_override: Number of GPU blocks to use. This overrides the
             profiled num_gpu_blocks if specified. Does nothing if None.
     """
 
@@ -344,14 +346,14 @@ class CacheConfig:
         gpu_memory_utilization: float,
         swap_space: int,
         cache_dtype: str,
-        forced_num_gpu_blocks: Optional[int] = None,
+        num_gpu_blocks_override: Optional[int] = None,
         sliding_window: Optional[int] = None,
         enable_prefix_caching: bool = False,
     ) -> None:
         self.block_size = block_size
         self.gpu_memory_utilization = gpu_memory_utilization
         self.swap_space_bytes = swap_space * _GB
-        self.forced_num_gpu_blocks = forced_num_gpu_blocks
+        self.num_gpu_blocks_override = num_gpu_blocks_override
         self.cache_dtype = cache_dtype
         self.sliding_window = sliding_window
         self.enable_prefix_caching = enable_prefix_caching
@@ -578,7 +580,8 @@ class SchedulerConfig:
         self._verify_args()
 
     def _verify_args(self) -> None:
-        if self.max_num_batched_tokens < self.max_model_len:
+        if (self.max_num_batched_tokens < self.max_model_len
+                and not self.chunked_prefill_enabled):
             raise ValueError(
                 f"max_num_batched_tokens ({self.max_num_batched_tokens}) is "
                 f"smaller than max_model_len ({self.max_model_len}). "

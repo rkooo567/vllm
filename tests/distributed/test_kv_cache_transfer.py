@@ -9,13 +9,14 @@ import ray
 from vllm import EngineArgs, LLMEngine
 from vllm.utils import get_open_port
 from vllm.worker.cache_engine import CacheEngine
-from vllm.worker.worker import init_distributed_environment
+from vllm.worker.worker import init_worker_distributed_environment
 from vllm.utils import set_cuda_visible_devices
 from vllm.executor.ray_gpu_executor import RayGPUExecutorAsync, RayGPUExecutor
 from vllm.engine.ray_utils import initialize_ray_cluster
 from vllm.sequence import SequenceGroupMetadata, SequenceData
 from vllm import SamplingParams
 import math
+
 
 def run_all_workers(engine: LLMEngine, method: str, *args):
     """Run all the workers."""
@@ -35,6 +36,7 @@ def test_cache_transfer():
 
         @ray.remote
         class CacheWorker:
+
             def __init__(self, config, rank, world_size, master_port):
                 set_cuda_visible_devices([0, 1])
                 torch.cuda.set_device(torch.device(f"cuda:{rank}"))
@@ -55,7 +57,7 @@ def test_cache_transfer():
 
             def init_distributed(self):
                 distributed_init_method = f"tcp://localhost:{self.master_port}"
-                init_distributed_environment(
+                init_worker_distributed_environment(
                     self.config.parallel_config,
                     self.rank,
                     distributed_init_method=distributed_init_method,
@@ -67,8 +69,10 @@ def test_cache_transfer():
                 for i in range(self.cache.num_layers):
                     k, v = self.cache._get_kv_cache_to_send_recv(i)
                     for block_id in block_ids:
-                        k[block_id].copy_(torch.full(block_shape, val, device="cuda"))
-                        v[block_id].copy_(torch.full(block_shape, val, device="cuda"))
+                        k[block_id].copy_(
+                            torch.full(block_shape, val, device="cuda"))
+                        v[block_id].copy_(
+                            torch.full(block_shape, val, device="cuda"))
 
             def read(self):
                 return self.cache.gpu_cache
@@ -80,8 +84,8 @@ def test_cache_transfer():
                 self.cache.recv_blocks(block_ids)
 
             def num_layers(self):
-                return self.cache.num_layers            
-        
+                return self.cache.num_layers
+
         distributed_init_port = get_open_port()
         cache_a = CacheWorker.remote(config, 0, 2, distributed_init_port)
         cache_b = CacheWorker.remote(config, 1, 2, distributed_init_port)
@@ -100,9 +104,12 @@ def test_cache_transfer():
         ])
         kv_cache_b = ray.get(cache_b.read.remote())
         for i in range(ray.get(cache_a.num_layers.remote())):
-            for send_block_id, recv_block_id in zip(blocks_to_write, blocks_to_read):
-                torch.allclose(kv_cache_a[i][0][send_block_id].cpu(), kv_cache_b[i][0][recv_block_id].cpu())
-                torch.allclose(kv_cache_a[i][1][send_block_id].cpu(), kv_cache_b[i][0][recv_block_id].cpu())
+            for send_block_id, recv_block_id in zip(blocks_to_write,
+                                                    blocks_to_read):
+                torch.allclose(kv_cache_a[i][0][send_block_id].cpu(),
+                               kv_cache_b[i][0][recv_block_id].cpu())
+                torch.allclose(kv_cache_a[i][1][send_block_id].cpu(),
+                               kv_cache_b[i][0][recv_block_id].cpu())
 
     finally:
         ray.shutdown()

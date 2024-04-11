@@ -9,7 +9,6 @@ from vllm.sequence import (Sequence, SequenceGroup, SequenceStatus)
 
 logger = init_logger(__name__)
 
-
 # class DisaggScheduleOutputs:
 
 #     def __init__(
@@ -157,8 +156,7 @@ class DisaggScheduler:
 
         # first scheduling decoding
         decoding_meta_list, decoding_output = self.decode_scheduler.schedule(
-            enable_prefill=False,
-            enable_decode=True)
+            enable_prefill=False, enable_decode=True)
 
         if decoding_meta_list:
             self.decoding = True
@@ -169,8 +167,7 @@ class DisaggScheduler:
         # if we have new blocks to transfer, schedule prefill
         # for new blocks transfer
         transfer_meta_list, transfer_output = self.decode_scheduler.schedule(
-            enable_prefill=True,
-            enable_decode=False)
+            enable_prefill=True, enable_decode=False)
 
         if transfer_meta_list:
             self.decoding = True
