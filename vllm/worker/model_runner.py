@@ -325,7 +325,6 @@ class ModelRunner:
                 if i < start_idx:
                     slot_mapping.append(_PAD_SLOT_ID)
                     continue
-
                 block_number = block_table[i // self.block_size]
                 block_offset = i % self.block_size
                 slot = block_number * self.block_size + block_offset

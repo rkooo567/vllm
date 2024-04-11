@@ -38,7 +38,10 @@ def test_models(
     hf_outputs = hf_model.generate_greedy(example_prompts, max_tokens)
     del hf_model
 
-    vllm_model = vllm_runner(model, dtype=dtype)
+    vllm_model = vllm_runner(model,
+                             dtype=dtype,
+                             worker_use_ray=True,
+                             tensor_parallel_size=2)
     vllm_outputs = vllm_model.generate_greedy(example_prompts, max_tokens)
     del vllm_model
 

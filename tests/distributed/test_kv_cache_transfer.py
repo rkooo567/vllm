@@ -11,7 +11,7 @@ from vllm.utils import get_open_port
 from vllm.worker.cache_engine import CacheEngine
 from vllm.worker.worker import init_worker_distributed_environment
 from vllm.utils import set_cuda_visible_devices
-from vllm.executor.ray_gpu_executor import RayGPUExecutorAsync, RayGPUExecutor
+from vllm.executor.disagg_executor import DisaggRayGpuExecutor
 from vllm.engine.ray_utils import initialize_ray_cluster
 from vllm.sequence import SequenceGroupMetadata, SequenceData
 from vllm import SamplingParams
@@ -117,10 +117,11 @@ def test_cache_transfer():
 
 def test_executor_kv_cache_transfer():
     try:
-        engine_args = EngineArgs("facebook/opt-125m", worker_use_ray=True)
+        engine_args = EngineArgs("facebook/opt-125m",
+                                 enable_disaggregated_prefill=True)
         config = engine_args.create_engine_config()
         initialize_ray_cluster(config.parallel_config)
-        executor = RayGPUExecutor(
+        executor = DisaggRayGpuExecutor(
             config.model_config,
             config.cache_config,
             config.parallel_config,
@@ -130,6 +131,8 @@ def test_executor_kv_cache_transfer():
             config.vision_language_config,
             config.speculative_config,
         )
+        gpu_blocks, cpu_blocks = executor.determine_num_available_blocks()
+        executor.initialize_cache(gpu_blocks, cpu_blocks)
         executor.check_health()
 
         seq_group_metadata_list = []

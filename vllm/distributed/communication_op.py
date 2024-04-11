@@ -92,6 +92,7 @@ def tensor_model_parallel_gather(input_: torch.Tensor,
     else:
         gather_list = None
     # Gather.
+    print(f"SANG-TODO gather... {get_tensor_model_parallel_group=}")
     torch.distributed.gather(input_,
                              gather_list,
                              dst=dst,

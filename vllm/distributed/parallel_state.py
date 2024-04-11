@@ -38,7 +38,7 @@ _CPU_WORLD_GROUP = None
 # A list of global ranks for each pipeline group to ease calculation of the
 # source rank when broadcasting from the first or last pipeline stage.
 _PIPELINE_GLOBAL_RANKS = None
-_STAGE_GLOBAL_RANKS  = None
+_STAGE_GLOBAL_RANKS = None
 
 
 def init_distributed_environment(
@@ -99,10 +99,9 @@ def initialize_model_parallel(
     # get the backend of _DEVICE_WORLD_GROUP
     backend = backend or torch.distributed.get_backend()
     stage_size = 2 if enable_disaggregated_prefill else 1
-    print(f"SANG-TODO {tensor_model_parallel_size * pipeline_model_parallel_size * stage_size=}")
     # SANG-TODO update error msg.
-    if (world_size !=
-            tensor_model_parallel_size * pipeline_model_parallel_size * stage_size):
+    if (world_size != tensor_model_parallel_size *
+            pipeline_model_parallel_size * stage_size):
         raise RuntimeError(
             f"world_size ({world_size}) is not equal to "
             f"tensor_model_parallel_size ({tensor_model_parallel_size}) x "
@@ -122,11 +121,11 @@ def initialize_model_parallel(
     for i in range(num_tensor_model_parallel_groups):
         ranks = range(i * tensor_model_parallel_size,
                       (i + 1) * tensor_model_parallel_size)
+        print(f"SANG-TODO ranks: {ranks}")
+        print(f"SANG-TODO {num_tensor_model_parallel_groups=}")
         group = torch.distributed.new_group(ranks, backend=backend)
         if rank in ranks:
-            print("SANG-TODO group setting group", group)
             _TENSOR_MODEL_PARALLEL_GROUP = group
-    print("SANG-TODO group setting done")
 
     # Build the pipeline model-parallel groups.
     global _PIPELINE_MODEL_PARALLEL_GROUP
@@ -148,7 +147,8 @@ def initialize_model_parallel(
         # SANG-TODO Allow to do M:N mapping.
         assert pipeline_model_parallel_size == 1
         for i in range(num_stage_parallel_group):
-            ranks = range(0, world_size, num_stage_parallel_group)
+            ranks = range(i, world_size, num_stage_parallel_group)
+            print(f"SANG-TODO stage parallel ranks: {ranks}")
             group = torch.distributed.new_group(ranks)
             if rank in ranks:
                 _STAGE_PARALLEL_GROUP = group
@@ -168,11 +168,12 @@ def ensure_model_parallel_initialized(
     # get the backend of _DEVICE_WORLD_GROUP
     backend = backend or torch.distributed.get_backend()
     if not model_parallel_is_initialized():
-        initialize_model_parallel(tensor_model_parallel_size,
-                                  pipeline_model_parallel_size,
-                                  backend,
-                                  enable_disaggregated_prefill,
-                                  )
+        initialize_model_parallel(
+            tensor_model_parallel_size,
+            pipeline_model_parallel_size,
+            backend,
+            enable_disaggregated_prefill,
+        )
         return
 
     assert (
@@ -186,8 +187,7 @@ def ensure_model_parallel_initialized(
         f"{get_pipeline_model_parallel_world_size()=} vs. "
         f"{pipeline_model_parallel_size=}")
     assert (
-        get_tensor_model_parallel_world_size() == tensor_model_parallel_size
-    )
+        get_tensor_model_parallel_world_size() == tensor_model_parallel_size)
 
 
 def model_parallel_is_initialized():
@@ -249,8 +249,7 @@ def get_pipeline_model_parallel_rank():
 
 
 def get_stage_parallel_rank():
-    return torch.distributed.get_rank(
-        group=get_stage_parallel_group())
+    return torch.distributed.get_rank(group=get_stage_parallel_group())
 
 
 def get_tensor_model_parallel_src_rank():
@@ -310,8 +309,6 @@ def get_stage_model_parallel_prev_rank():
     rank_in_stage = get_stage_parallel_rank()
     world_size = get_stage_parallel_world_size()
     return _STAGE_GLOBAL_RANKS[(rank_in_stage - 1) % world_size]
-
-
 
 
 def destroy_model_parallel():
