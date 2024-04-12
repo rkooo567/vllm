@@ -14,6 +14,9 @@ _TENSOR_MODEL_PARALLEL_GROUP = None
 _PIPELINE_MODEL_PARALLEL_GROUP = None
 # Stage parallel group that the current rank belongs to.
 _STAGE_PARALLEL_GROUP = None
+_PREFILL_GLOBAL_RANKS = None
+_DECODE_GLOBAL_RANKS = None
+_GLOBAL_RANKS = None
 
 # when people blindly call `torch.distributed.all_reduce` etc,
 # it will use this group. It is initialized with the `backend`
@@ -38,7 +41,6 @@ _CPU_WORLD_GROUP = None
 # A list of global ranks for each pipeline group to ease calculation of the
 # source rank when broadcasting from the first or last pipeline stage.
 _PIPELINE_GLOBAL_RANKS = None
-_STAGE_GLOBAL_RANKS = None
 
 
 def init_distributed_environment(
@@ -113,6 +115,8 @@ def initialize_model_parallel(
     num_pipeline_model_parallel_groups: int = (world_size //
                                                pipeline_model_parallel_size)
     rank = torch.distributed.get_rank()
+    global _GLOBAL_RANKS
+    _GLOBAL_RANKS = list(range(world_size))
 
     # Build the tensor model-parallel groups.
     global _TENSOR_MODEL_PARALLEL_GROUP
@@ -124,14 +128,13 @@ def initialize_model_parallel(
         print(f"SANG-TODO ranks: {ranks}")
         print(f"SANG-TODO {num_tensor_model_parallel_groups=}")
         group = torch.distributed.new_group(ranks, backend=backend)
+        print(f"SANG-TODO {group=}")
         if rank in ranks:
             _TENSOR_MODEL_PARALLEL_GROUP = group
 
     # Build the pipeline model-parallel groups.
     global _PIPELINE_MODEL_PARALLEL_GROUP
     global _PIPELINE_GLOBAL_RANKS
-    global _STAGE_PARALLEL_GROUP
-    global _STAGE_GLOBAL_RANKS
 
     assert _PIPELINE_MODEL_PARALLEL_GROUP is None, (
         "pipeline model parallel group is already initialized")
@@ -143,16 +146,24 @@ def initialize_model_parallel(
             _PIPELINE_GLOBAL_RANKS = ranks
 
     if enable_disaggregated_prefill:
-        num_stage_parallel_group: int = (world_size // 2)
         # SANG-TODO Allow to do M:N mapping.
-        assert pipeline_model_parallel_size == 1
-        for i in range(num_stage_parallel_group):
-            ranks = range(i, world_size, num_stage_parallel_group)
-            print(f"SANG-TODO stage parallel ranks: {ranks}")
-            group = torch.distributed.new_group(ranks)
-            if rank in ranks:
-                _STAGE_PARALLEL_GROUP = group
-                _STAGE_GLOBAL_RANKS = ranks
+        global _STAGE_PARALLEL_GROUP
+        global _PREFILL_GLOBAL_RANKS
+        global _DECODE_GLOBAL_RANKS
+        prefill_ranks = range(world_size // 2)
+        decode_ranks = range(world_size // 2, world_size)
+        _PREFILL_GLOBAL_RANKS = list(prefill_ranks)
+        _DECODE_GLOBAL_RANKS = list(decode_ranks)
+
+        prefill_group = torch.distributed.new_group(range(world_size // 2))
+        decode_group = torch.distributed.new_group(
+            range(world_size // 2, world_size))
+        if rank < world_size // 2:
+            _STAGE_PARALLEL_GROUP = prefill_group
+        else:
+            _STAGE_PARALLEL_GROUP = decode_group
+    else:
+        _STAGE_PARALLEL_GROUP = torch.distributed.group.WORLD
 
 
 def ensure_model_parallel_initialized(
@@ -239,7 +250,8 @@ def get_stage_parallel_world_size():
 
 def get_tensor_model_parallel_rank():
     """Return my rank for the tensor model parallel group."""
-    return torch.distributed.get_rank(group=get_tensor_model_parallel_group())
+    rank = torch.distributed.get_rank(group=get_tensor_model_parallel_group())
+    return rank
 
 
 def get_pipeline_model_parallel_rank():
@@ -296,19 +308,19 @@ def get_pipeline_model_parallel_prev_rank():
 
 
 def get_stage_model_parallel_next_rank():
-    assert _STAGE_GLOBAL_RANKS is not None, (
+    assert _GLOBAL_RANKS is not None, (
         "Stage parallel group is not initialized")
-    rank_in_stage = get_stage_parallel_rank()
-    world_size = get_stage_parallel_world_size()
-    return _STAGE_GLOBAL_RANKS[(rank_in_stage + 1) % world_size]
+    rank = torch.distributed.get_rank()
+    world_size = torch.distributed.get_world_size()
+    return _GLOBAL_RANKS[(rank + world_size // 2) % world_size]
 
 
 def get_stage_model_parallel_prev_rank():
-    assert _STAGE_GLOBAL_RANKS is not None, (
+    assert _GLOBAL_RANKS is not None, (
         "Stage parallel group is not initialized")
-    rank_in_stage = get_stage_parallel_rank()
-    world_size = get_stage_parallel_world_size()
-    return _STAGE_GLOBAL_RANKS[(rank_in_stage - 1) % world_size]
+    rank = torch.distributed.get_rank()
+    world_size = torch.distributed.get_world_size()
+    return _GLOBAL_RANKS[(rank - world_size // 2) % world_size]
 
 
 def destroy_model_parallel():
@@ -327,8 +339,12 @@ def destroy_model_parallel():
     _STAGE_PARALLEL_GROUP = None
     global _PIPELINE_GLOBAL_RANKS
     _PIPELINE_GLOBAL_RANKS = None
-    global _STAGE_GLOBAL_RANKS
-    _STAGE_GLOBAL_RANKS = None
+    global _PREFILL_GLOBAL_RANKS
+    global _DECODE_GLOBAL_RANKS
+    _PREFILL_GLOBAL_RANKS = None
+    _DECODE_GLOBAL_RANKS = None
+    global _GLOBAL_RANKS
+    _GLOBAL_RANKS = None
     from vllm.distributed.device_communicators import pynccl_utils
 
     # Destroy the pynccl states if any.

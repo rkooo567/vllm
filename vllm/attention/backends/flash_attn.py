@@ -194,6 +194,7 @@ class FlashAttentionImpl(AttentionImpl):
                                                 attn_metadata.slot_mapping,
                                                 attn_metadata.kv_cache_dtype,
                                                 kv_scale)
+            print(f"SANG-TODO value cache after writing. {value_cache[0][0]}")
 
         num_prefill_tokens = attn_metadata.num_prefill_tokens
         num_decode_tokens = attn_metadata.num_decode_tokens

@@ -20,6 +20,7 @@ from vllm.sequence import SamplerOutput, SequenceGroupMetadata
 from vllm.worker.cache_engine import CacheEngine
 from vllm.worker.model_runner import ModelRunner
 from vllm.worker.worker_base import WorkerBase
+from vllm.distributed.parallel_state import get_stage_model_parallel_next_rank, get_stage_model_parallel_prev_rank
 
 
 class Worker(WorkerBase):
@@ -42,7 +43,7 @@ class Worker(WorkerBase):
         distributed_init_method: str,
         lora_config: Optional[LoRAConfig] = None,
         vision_language_config: Optional[VisionLanguageConfig] = None,
-        is_driver_worker: bool = False,
+        driver_worker_rank: int = -1,
     ) -> None:
         self.model_config = model_config
         self.parallel_config = parallel_config
@@ -53,7 +54,8 @@ class Worker(WorkerBase):
         self.rank = rank
         self.distributed_init_method = distributed_init_method
         self.lora_config = lora_config
-        self.is_driver_worker = is_driver_worker
+        self.driver_worker_rank = driver_worker_rank
+        self.is_driver_worker = rank == driver_worker_rank
 
         self.vision_language_config = vision_language_config
         if self.vision_language_config:
@@ -66,13 +68,16 @@ class Worker(WorkerBase):
             scheduler_config,
             device_config,
             lora_config=self.lora_config,
+            rank=rank,
             kv_cache_dtype=self.cache_config.cache_dtype,
-            is_driver_worker=is_driver_worker,
+            driver_worker_rank=driver_worker_rank,
             vision_language_config=vision_language_config)
         # Uninitialized cache engine. Will be initialized by
         # initialize_cache.
         self.cache_engine = None
         self.gpu_cache = None
+        self.block_stream = torch.cuda.Stream()
+        self.blocks_sending = []
 
     def init_device(self) -> None:
         if self.device_config.device.type == "cuda":
@@ -198,12 +203,16 @@ class Worker(WorkerBase):
 
     @torch.inference_mode()
     def execute_model(
-        self,
-        seq_group_metadata_list: Optional[List[SequenceGroupMetadata]] = None,
-        blocks_to_swap_in: Optional[Dict[int, int]] = None,
-        blocks_to_swap_out: Optional[Dict[int, int]] = None,
-        blocks_to_copy: Optional[Dict[int, List[int]]] = None,
+            self,
+            seq_group_metadata_list: Optional[
+                List[SequenceGroupMetadata]] = None,
+            blocks_to_swap_in: Optional[Dict[int, int]] = None,
+            blocks_to_swap_out: Optional[Dict[int, int]] = None,
+            blocks_to_copy: Optional[Dict[int, List[int]]] = None,
+            blocks_to_send: Optional[List[int]] = None,
+            blocks_to_recv: Optional[List[int]] = None
     ) -> Optional[SamplerOutput]:
+        print("SANG-TODO execute model.")
         if self.is_driver_worker:
             assert seq_group_metadata_list is not None
             num_seq_groups = len(seq_group_metadata_list)
@@ -215,23 +224,43 @@ class Worker(WorkerBase):
                 "blocks_to_swap_in": blocks_to_swap_in,
                 "blocks_to_swap_out": blocks_to_swap_out,
                 "blocks_to_copy": blocks_to_copy,
+                "blocks_to_send": blocks_to_send or [],
+                "blocks_to_recv": blocks_to_send or [],
             }
-            broadcast_tensor_dict(data, src=0)
+            broadcast_tensor_dict(data, src=self.driver_worker_rank)
         else:
-            data = broadcast_tensor_dict(src=0)
+            data = broadcast_tensor_dict(src=self.driver_worker_rank)
             num_seq_groups = data["num_seq_groups"]
             blocks_to_swap_in = data["blocks_to_swap_in"]
             blocks_to_swap_out = data["blocks_to_swap_out"]
             blocks_to_copy = data["blocks_to_copy"]
+            blocks_to_send = data["blocks_to_send"]
+            blocks_to_recv = data["blocks_to_recv"]
+
+        # Wait until block send is finished
+        for req in self.blocks_sending:
+            req.wait()
+
+        if blocks_to_recv is not None:
+            assert blocks_to_send is None
+            with torch.cuda.stream(self.block_stream):
+                self.cache_engine.recv_blocks(blocks_to_recv)
 
         self.cache_swap(blocks_to_swap_in, blocks_to_swap_out, blocks_to_copy)
 
         # If there is no input, we don't need to execute the model.
         if num_seq_groups == 0:
             return {}
+        print(f"SANG-TODO gpu cache: {self.gpu_cache is not None}")
 
         output = self.model_runner.execute_model(seq_group_metadata_list,
                                                  self.gpu_cache)
+
+        if blocks_to_send is not None:
+            with torch.cuda.stream(self.block_stream):
+                self.blocks_sending = self.cache_engine.send_blocks(
+                    blocks_to_send)
+
         return output
 
     def add_lora(self, lora_request: LoRARequest) -> bool:
@@ -299,6 +328,15 @@ def init_worker_distributed_environment(
 
     # A small all_reduce for warmup.
     torch.distributed.all_reduce(torch.zeros(1).cuda())
+    # Need to run warmup for send/recv.
+    if parallel_config.enable_disaggregated_prefill:
+        if rank < parallel_config.world_size // 2:
+            torch.distributed.send(torch.zeros(1).cuda(),
+                                   dst=get_stage_model_parallel_next_rank())
+        else:
+            torch.distributed.recv(torch.zeros(1).cuda(),
+                                   src=get_stage_model_parallel_prev_rank())
+    print("SANG-TODO all reduce warmup done.")
     if pynccl_utils.is_initialized():
         pynccl_utils.all_reduce(torch.zeros(1).cuda())
 

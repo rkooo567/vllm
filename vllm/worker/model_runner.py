@@ -26,6 +26,7 @@ from vllm.sequence import (MultiModalData, SamplerOutput, SequenceData,
 from vllm.utils import (CudaMemoryProfiler, async_tensor_h2d, is_hip,
                         is_pin_memory_available, make_tensor_with_pad,
                         maybe_expand_dim)
+from vllm.distributed.parallel_state import get_stage_parallel_group
 
 logger = init_logger(__name__)
 
@@ -108,15 +109,17 @@ class ModelRunner:
         scheduler_config: SchedulerConfig,
         device_config: DeviceConfig,
         lora_config: Optional[LoRAConfig],
+        rank: int,
         kv_cache_dtype: Optional[str] = "auto",
-        is_driver_worker: bool = False,
+        driver_worker_rank: int = -1,
         vision_language_config: Optional[VisionLanguageConfig] = None,
     ):
         self.model_config = model_config
         self.parallel_config = parallel_config
         self.scheduler_config = scheduler_config
         self.lora_config = lora_config
-        self.is_driver_worker = is_driver_worker
+        self.driver_worker_rank = driver_worker_rank
+        self.is_driver_worker = rank == driver_worker_rank
 
         # model_config can be None in tests/samplers/test_sampler.py.
         # FIXME(woosuk): This is a hack to make the tests work. Refactor this.
@@ -151,6 +154,7 @@ class ModelRunner:
             self.model_config.dtype if model_config is not None else None)
 
     def load_model(self) -> None:
+        s = time.time()
         with CudaMemoryProfiler() as m:
             self.model = get_model(
                 self.model_config,
@@ -159,6 +163,7 @@ class ModelRunner:
                 vision_language_config=self.vision_language_config,
                 parallel_config=self.parallel_config,
                 scheduler_config=self.scheduler_config)
+        logger.info(f"Loading model took {time.time() - s} seconds")
 
         self.model_memory_usage = m.consumed_memory
         logger.info(f"Loading model weights took "
@@ -737,7 +742,7 @@ class ModelRunner:
                 metadata_dict.update(prefill_attn_metadata.asdict_zerocopy())
             else:
                 metadata_dict.update(decode_attn_metadata.asdict_zerocopy())
-            broadcast_tensor_dict(metadata_dict, src=0)
+            broadcast_tensor_dict(metadata_dict, src=self.driver_worker_rank)
 
             # Broadcast decode attn metadata for mixed batch type.
             # The additional broadcast costs 300us overhead on 4 A10 GPUs.
@@ -745,9 +750,10 @@ class ModelRunner:
             if batch_type == BatchType.MIXED:
                 assert decode_attn_metadata is not None
                 metadata_dict = decode_attn_metadata.asdict_zerocopy()
-                broadcast_tensor_dict(metadata_dict, src=0)
+                broadcast_tensor_dict(metadata_dict,
+                                      src=self.driver_worker_rank)
         else:
-            metadata_dict = broadcast_tensor_dict(src=0)
+            metadata_dict = broadcast_tensor_dict(src=self.driver_worker_rank)
             input_tokens = metadata_dict.pop("input_tokens")
             input_positions = metadata_dict.pop("input_positions")
             slot_mapping = metadata_dict.pop("slot_mapping")
@@ -783,7 +789,8 @@ class ModelRunner:
             # if it is a mixed batch, decode attn_metadata is broadcasted
             # separately.
             if batch_type == BatchType.MIXED:
-                metadata_dict = broadcast_tensor_dict(src=0)
+                metadata_dict = broadcast_tensor_dict(
+                    src=self.driver_worker_rank)
                 decode_attn_metadata = self.attn_backend.make_metadata(
                     **metadata_dict)
 

@@ -119,7 +119,7 @@ class RayGPUExecutor(ExecutorBase):
 
         # Create the workers.
         driver_ip = get_ip()
-        for bundle_id, bundle in placement_group.bundle_specs:
+        for bundle_id, bundle in enumerate(placement_group.bundle_specs):
             if not bundle.get("GPU", 0):
                 continue
             scheduling_strategy = PlacementGroupSchedulingStrategy(
@@ -221,7 +221,7 @@ class RayGPUExecutor(ExecutorBase):
             distributed_init_method=distributed_init_method,
             lora_config=self.lora_config,
             vision_language_config=self.vision_language_config,
-            is_driver_worker=True,
+            driver_worker_rank=driver_rank,
         )
 
         self._run_workers("init_device")

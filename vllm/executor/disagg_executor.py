@@ -29,7 +29,9 @@ logger = init_logger(__name__)
 # Run vLLM with VLLM_USE_RAY_COMPILED_DAG=1 to enable it.
 USE_RAY_COMPILED_DAG = bool(os.getenv("VLLM_USE_RAY_COMPILED_DAG", 0))
 
+
 class DisaggRayGpuExecutor(ExecutorBase):
+
     def __init__(
         self,
         model_config: ModelConfig,
@@ -68,7 +70,8 @@ class DisaggRayGpuExecutor(ExecutorBase):
         prefill_ranks = ranks[:half]
         decode_ranks = ranks[half:]
 
-        prefill_workers, decode_workers = self._init_workers_ray(placement_group, ranks, prefill_ranks, decode_ranks)
+        prefill_workers, decode_workers = self._init_workers_ray(
+            placement_group, ranks, prefill_ranks, decode_ranks)
 
         self.prefill_executor = RayGPUExecutor(
             prefill_ranks,
@@ -85,8 +88,8 @@ class DisaggRayGpuExecutor(ExecutorBase):
             max_parallel_loading_workers,
         )
 
-    def _init_workers_ray(self, placement_group: "PlacementGroup", ranks, prefill_ranks, decode_ranks,
-                          **ray_remote_kwargs):
+    def _init_workers_ray(self, placement_group: "PlacementGroup", ranks,
+                          prefill_ranks, decode_ranks, **ray_remote_kwargs):
         if self.parallel_config.tensor_parallel_size == 1:
             # For single GPU case, we use a ray worker with constrained memory.
             num_gpus = self.cache_config.gpu_memory_utilization
@@ -152,13 +155,14 @@ class DisaggRayGpuExecutor(ExecutorBase):
         vision_language_config = copy.deepcopy(self.vision_language_config)
 
         # Initialize the actual workers with the Worker class.
-        for rank, (worker, (node_id, _)) in zip(ranks,
-                zip(workers, worker_node_and_gpu_ids)
-        ):
+        for rank, (worker, (node_id,
+                            _)) in zip(ranks,
+                                       zip(workers, worker_node_and_gpu_ids)):
             local_rank = node_workers[node_id].index(rank)
-            is_driver_worker = False
-            if rank == prefill_ranks[0] or rank == decode_ranks[0]:
-                is_driver_worker = True
+            if rank in prefill_ranks:
+                driver_worker_rank = prefill_ranks[0]
+            else:
+                driver_worker_rank = decode_ranks[0]
             worker.init_worker.remote(
                 lambda rank=rank, local_rank=local_rank: Worker(
                     model_config=model_config,
@@ -171,7 +175,7 @@ class DisaggRayGpuExecutor(ExecutorBase):
                     distributed_init_method=distributed_init_method,
                     lora_config=lora_config,
                     vision_language_config=vision_language_config,
-                    is_driver_worker=is_driver_worker,
+                    driver_worker_rank=driver_worker_rank,
                 ))
 
         return (
@@ -181,8 +185,10 @@ class DisaggRayGpuExecutor(ExecutorBase):
 
     # Run the same method across all workers in 2 executors.
     def _run_workers(self, method, *args, **kwargs):
-        refs = self.prefill_executor._run_workers_async(method, *args, **kwargs)
-        refs.extend(self.decode_executor._run_workers_async(method, *args, **kwargs))
+        refs = self.prefill_executor._run_workers_async(
+            method, *args, **kwargs)
+        refs.extend(
+            self.decode_executor._run_workers_async(method, *args, **kwargs))
         return ray.get(refs)
 
     def determine_num_available_blocks(self) -> tuple[int, int]:
@@ -210,18 +216,34 @@ class DisaggRayGpuExecutor(ExecutorBase):
                           num_gpu_blocks=num_gpu_blocks,
                           num_cpu_blocks=num_cpu_blocks)
 
-    def execute_model(self,
-                      seq_group_metadata_list: List[SequenceGroupMetadata],
-                      blocks_to_swap_in: Dict[int, int],
-                      blocks_to_swap_out: Dict[int, int],
-                      blocks_to_copy: Dict[int, List[int]]) -> SamplerOutput:
+    def execute_model(
+            self,
+            seq_group_metadata_list: List[SequenceGroupMetadata],
+            blocks_to_swap_in: Dict[int, int],
+            blocks_to_swap_out: Dict[int, int],
+            blocks_to_copy: Dict[int, List[int]],
+            blocks_to_send: Optional[List[int]] = None,
+            blocks_to_recv: Optional[List[int]] = None) -> SamplerOutput:
         if seq_group_metadata_list[0].is_prompt:
-            print("SANG-TODO execute")
-            output = self.prefill_executor.execute_model(seq_group_metadata_list, blocks_to_swap_in, blocks_to_swap_out, blocks_to_copy)
-            print("SANG-TODO execute finished")
+            assert blocks_to_recv is None
+            print("SANG-TODO execute prefill")
+            output = self.prefill_executor.execute_model(
+                seq_group_metadata_list,
+                blocks_to_swap_in,
+                blocks_to_swap_out,
+                blocks_to_copy,
+                blocks_to_send=blocks_to_send,
+                blocks_to_recv=blocks_to_recv)
         else:
-            assert False
-            output = self.decode_executor.execute_model(seq_group_metadata_list, blocks_to_swap_in, blocks_to_swap_out, blocks_to_copy)
+            assert blocks_to_send is None
+            print("SANG-TODO execute decodee")
+            output = self.decode_executor.execute_model(
+                seq_group_metadata_list,
+                blocks_to_swap_in,
+                blocks_to_swap_out,
+                blocks_to_copy,
+                blocks_to_send=blocks_to_send,
+                blocks_to_recv=blocks_to_recv)
         return output
 
     def add_lora(self, lora_request: LoRARequest) -> bool:
@@ -241,11 +263,7 @@ class DisaggRayGpuExecutor(ExecutorBase):
 
 class RayGPUExecutor(ExecutorBase):
 
-    def __init__(
-        self,
-        ranks: List[int],
-        workers
-    ) -> None:
+    def __init__(self, ranks: List[int], workers) -> None:
         self.workers = workers
         self.driver_worker = self.workers.pop(0)
         self.ranks = ranks
@@ -295,11 +313,15 @@ class RayGPUExecutor(ExecutorBase):
                           num_gpu_blocks=num_gpu_blocks,
                           num_cpu_blocks=num_cpu_blocks)
 
-    def execute_model(self,
-                      seq_group_metadata_list: List[SequenceGroupMetadata],
-                      blocks_to_swap_in: Dict[int, int],
-                      blocks_to_swap_out: Dict[int, int],
-                      blocks_to_copy: Dict[int, List[int]]) -> SamplerOutput:
+    def execute_model(
+        self,
+        seq_group_metadata_list: List[SequenceGroupMetadata],
+        blocks_to_swap_in: Dict[int, int],
+        blocks_to_swap_out: Dict[int, int],
+        blocks_to_copy: Dict[int, List[int]],
+        blocks_to_send: Optional[List[int]],
+        blocks_to_recv: Optional[List[int]],
+    ) -> SamplerOutput:
         all_outputs = self._run_workers(
             "execute_model",
             driver_kwargs={
@@ -307,6 +329,8 @@ class RayGPUExecutor(ExecutorBase):
                 "blocks_to_swap_in": blocks_to_swap_in,
                 "blocks_to_swap_out": blocks_to_swap_out,
                 "blocks_to_copy": blocks_to_copy,
+                "blocks_to_send": blocks_to_send,
+                "blocks_to_recv": blocks_to_recv,
             },
             use_ray_compiled_dag=USE_RAY_COMPILED_DAG)
 
@@ -341,7 +365,15 @@ class RayGPUExecutor(ExecutorBase):
         use_ray_compiled_dag: bool = False,
         **kwargs,
     ) -> List["ray.ObjectRef"]:
-        return ray.get(self._run_workers_async(method, *args, driver_args=driver_args, driver_kwargs=driver_kwargs, max_concurrent_workers=max_concurrent_workers, use_ray_compiled_dag=use_ray_compiled_dag, **kwargs))
+        return ray.get(
+            self._run_workers_async(
+                method,
+                *args,
+                driver_args=driver_args,
+                driver_kwargs=driver_kwargs,
+                max_concurrent_workers=max_concurrent_workers,
+                use_ray_compiled_dag=use_ray_compiled_dag,
+                **kwargs))
 
     def _run_workers_async(
         self,
@@ -376,7 +408,8 @@ class RayGPUExecutor(ExecutorBase):
             driver_kwargs = kwargs
 
         # Start the driver worker after all the ray workers.
-        driver_worker_output = self.driver_worker.execute_method.remote(method, *driver_args, **driver_kwargs)
+        driver_worker_output = self.driver_worker.execute_method.remote(
+            method, *driver_args, **driver_kwargs)
         refs = [driver_worker_output]
         refs.extend(ray_worker_outputs)
         return refs

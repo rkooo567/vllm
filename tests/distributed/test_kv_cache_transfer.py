@@ -12,6 +12,7 @@ from vllm.worker.cache_engine import CacheEngine
 from vllm.worker.worker import init_worker_distributed_environment
 from vllm.utils import set_cuda_visible_devices
 from vllm.executor.disagg_executor import DisaggRayGpuExecutor
+from vllm.executor.ray_gpu_executor import RayGPUExecutor
 from vllm.engine.ray_utils import initialize_ray_cluster
 from vllm.sequence import SequenceGroupMetadata, SequenceData
 from vllm import SamplingParams
@@ -54,6 +55,8 @@ def test_cache_transfer():
                 self.rank = rank
                 self.world_size = world_size
                 self.master_port = master_port
+                self.reqs = []
+                self.stream = torch.cuda.Stream()
 
             def init_distributed(self):
                 distributed_init_method = f"tcp://localhost:{self.master_port}"
@@ -78,10 +81,12 @@ def test_cache_transfer():
                 return self.cache.gpu_cache
 
             def send(self, block_ids):
-                self.cache.send_blocks(block_ids)
+                with torch.cuda.stream(self.stream):
+                    self.cache.send_blocks(block_ids)
 
             def recv(self, block_ids):
-                self.cache.recv_blocks(block_ids)
+                with torch.cuda.stream(self.stream):
+                    self.cache.recv_blocks(block_ids)
 
             def num_layers(self):
                 return self.cache.num_layers
@@ -98,10 +103,9 @@ def test_cache_transfer():
         blocks_to_read = [2, 4, 6]
         ray.get(cache_a.write.remote(blocks_to_write, 2))
         kv_cache_a = ray.get(cache_a.read.remote())
-        ray.get([
-            cache_a.send.remote(blocks_to_write),
-            cache_b.recv.remote(blocks_to_read),
-        ])
+        # warmup
+        ray.get(cache_a.send.remote(blocks_to_write))
+        ray.get(cache_b.recv.remote(blocks_to_read))
         kv_cache_b = ray.get(cache_b.read.remote())
         for i in range(ray.get(cache_a.num_layers.remote())):
             for send_block_id, recv_block_id in zip(blocks_to_write,
@@ -117,8 +121,13 @@ def test_cache_transfer():
 
 def test_executor_kv_cache_transfer():
     try:
-        engine_args = EngineArgs("facebook/opt-125m",
-                                 enable_disaggregated_prefill=True)
+        engine_args = EngineArgs(
+            "facebook/opt-125m",
+            enable_disaggregated_prefill=True,
+            pipeline_parallel_size=1,
+            worker_use_ray=1,
+            enforce_eager=True,
+        )
         config = engine_args.create_engine_config()
         initialize_ray_cluster(config.parallel_config)
         executor = DisaggRayGpuExecutor(
@@ -131,19 +140,28 @@ def test_executor_kv_cache_transfer():
             config.vision_language_config,
             config.speculative_config,
         )
+        # executor = RayGPUExecutor(
+        #     config.model_config,
+        #     config.cache_config,
+        #     config.parallel_config,
+        #     config.scheduler_config,
+        #     config.device_config,
+        #     config.lora_config,
+        #     config.vision_language_config,
+        #     config.speculative_config,
+        # )
         gpu_blocks, cpu_blocks = executor.determine_num_available_blocks()
         executor.initialize_cache(gpu_blocks, cpu_blocks)
         executor.check_health()
 
-        seq_group_metadata_list = []
         block_size = config.cache_config.block_size
         prompt_len = 30
-        data = SequenceData(prompt_token_ids=[2] * prompt_len)
+        data = SequenceData(prompt_token_ids=[i for i in range(prompt_len)])
         num_blocks = math.ceil(len(data.prompt_token_ids) / block_size)
 
         seq_id = 0
-        block_tables = {seq_id: list(range(num_blocks))}
-        print(block_tables)
+        blocks_to_send = list(range(num_blocks))
+        block_tables = {seq_id: blocks_to_send}
         seq_group_metadata = SequenceGroupMetadata(
             request_id=f"1",
             is_prompt=True,
@@ -152,8 +170,30 @@ def test_executor_kv_cache_transfer():
             block_tables=block_tables,
             token_chunk_size=len(data.prompt_token_ids),
         )
-        seq_group_metadata_list.append(seq_group_metadata)
-        output = executor.execute_model(seq_group_metadata_list, {}, {}, {})
-        print(output)
+        seq_group_metadata_list = [seq_group_metadata]
+        outputs = executor.execute_model(seq_group_metadata_list, {}, {}, {},
+                                         blocks_to_send=blocks_to_send)
+        print(f"prefill output: {outputs}")
+
+        sample_output = outputs.outputs[0].samples[0]
+        data.append_token_id(
+            sample_output.output_token,
+            sample_output.logprobs[sample_output.output_token].logprob)
+        num_blocks = math.ceil(data.get_len() / block_size)
+        block_tables = {seq_id: list(range(num_blocks))}
+        seq_group_metadata = SequenceGroupMetadata(
+            request_id=f"1",
+            is_prompt=False,
+            seq_data={seq_id: data},
+            sampling_params=SamplingParams(temperature=0),
+            block_tables=block_tables,
+            token_chunk_size=1,
+        )
+        seq_group_metadata_list = [seq_group_metadata]
+        outputs = executor.execute_model(seq_group_metadata_list, {}, {}, {},
+                                         blocks_to_recv=blocks_to_send)
+        print(f"decode output: {outputs}")
+        import time
+        time.sleep(5)
     finally:
         ray.shutdown()

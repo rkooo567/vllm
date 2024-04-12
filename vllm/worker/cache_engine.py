@@ -127,6 +127,7 @@ class CacheEngine:
 
         key_tensor = torch.stack(tuple(keys))
         value_tensor = torch.stack(tuple(values))
+        print(f"SANG-TODO next rank: {get_stage_model_parallel_next_rank()=}")
         reqs.append(
             torch.distributed.isend(key_tensor,
                                     dst=get_stage_model_parallel_next_rank()))

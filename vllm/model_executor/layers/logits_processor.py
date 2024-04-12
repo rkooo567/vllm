@@ -61,14 +61,10 @@ class LogitsProcessor(nn.Module):
     def _get_logits(self, hidden_states: torch.Tensor, embedding: torch.Tensor,
                     embedding_bias: Optional[torch.Tensor]) -> torch.Tensor:
         # Get the logits for the next tokens.
-        print(f"SANG-TODO matmul")
         logits = torch.matmul(hidden_states, embedding.t())
-        print(f"SANG-TODO matmul done")
         if embedding_bias is not None:
             logits += embedding_bias
-        print(f"SANG-TODO gather")
         logits = tensor_model_parallel_gather(logits)
-        print(f"SANG-TODO gather done")
         # Remove paddings in vocab (if any).
         if logits is not None:
             logits = logits[:, :self.org_vocab_size]
