@@ -509,6 +509,7 @@ class ParallelConfig:
         self.enable_disaggregated_prefill = enable_disaggregated_prefill
         if self.enable_disaggregated_prefill:
             stage_size = 2
+            self.worker_use_ray = True
             self.disable_custom_all_reduce = True
         else:
             stage_size = 1

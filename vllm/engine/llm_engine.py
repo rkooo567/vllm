@@ -1,6 +1,7 @@
 import time
 from typing import Iterable, List, Optional, Tuple, Type, Union
 
+from joblib import parallel_config
 from transformers import PreTrainedTokenizer
 
 import vllm
@@ -163,6 +164,8 @@ class LLMEngine:
                     model_config.enforce_eager,
                     "disable_custom_all_reduce":
                     parallel_config.disable_custom_all_reduce,
+                    "enable_disaggregated_prefill":
+                    parallel_config.enable_disaggregated_prefill,
                 })
 
         # Ping the tokenizer to ensure liveness if it runs in a
@@ -226,8 +229,12 @@ class LLMEngine:
             executor_class = CPUExecutor
         elif engine_config.parallel_config.worker_use_ray:
             initialize_ray_cluster(engine_config.parallel_config)
-            from vllm.executor.ray_gpu_executor import RayGPUExecutor
-            executor_class = RayGPUExecutor
+            if engine_config.parallel_config.enable_disaggregated_prefill:
+                from vllm.executor.disagg_executor import DisaggRayGpuExecutor
+                executor_class = DisaggRayGpuExecutor
+            else:
+                from vllm.executor.ray_gpu_executor import RayGPUExecutor
+                executor_class = RayGPUExecutor
         else:
             assert engine_config.parallel_config.world_size == 1, (
                 "Ray is required if parallel_config.world_size > 1.")

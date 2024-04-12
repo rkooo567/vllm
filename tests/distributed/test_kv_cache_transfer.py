@@ -193,7 +193,5 @@ def test_executor_kv_cache_transfer():
         outputs = executor.execute_model(seq_group_metadata_list, {}, {}, {},
                                          blocks_to_recv=blocks_to_send)
         print(f"decode output: {outputs}")
-        import time
-        time.sleep(5)
     finally:
         ray.shutdown()
