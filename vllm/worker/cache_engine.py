@@ -136,6 +136,7 @@ class CacheEngine:
                                     dst=get_stage_model_parallel_next_rank()))
         return reqs
 
+    # SANG-TODO rename it with sync, async
     def recv_blocks(self, block_ids: List[int]) -> None:
         kv_cache_shape = self.attn_backend.get_kv_cache_shape(
             self.num_gpu_blocks, self.block_size, self.num_heads,

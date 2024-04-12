@@ -238,8 +238,10 @@ class Worker(WorkerBase):
             blocks_to_recv = data["blocks_to_recv"]
 
         # Wait until block send is finished
+        # Before send is over, we should not modify the kv cache.
         for req in self.blocks_sending:
             req.wait()
+        self.blocks_sending.clear()
 
         if blocks_to_recv is not None:
             assert blocks_to_send is None
@@ -336,7 +338,7 @@ def init_worker_distributed_environment(
         else:
             torch.distributed.recv(torch.zeros(1).cuda(),
                                    src=get_stage_model_parallel_prev_rank())
-    print("SANG-TODO all reduce warmup done.")
+
     if pynccl_utils.is_initialized():
         pynccl_utils.all_reduce(torch.zeros(1).cuda())
 
