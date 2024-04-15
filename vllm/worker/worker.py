@@ -7,7 +7,8 @@ import torch
 import torch.distributed
 
 from vllm.config import (CacheConfig, DeviceConfig, LoRAConfig, ModelConfig,
-                         ParallelConfig, SchedulerConfig, VisionLanguageConfig)
+                         ParallelConfig, SchedulerConfig, TensorizerConfig,
+                         VisionLanguageConfig)
 from vllm.distributed import (broadcast_tensor_dict,
                               ensure_model_parallel_initialized,
                               init_distributed_environment)
@@ -44,6 +45,7 @@ class Worker(WorkerBase):
         lora_config: Optional[LoRAConfig] = None,
         vision_language_config: Optional[VisionLanguageConfig] = None,
         driver_worker_rank: int = -1,
+        tensorizer_config: Optional[TensorizerConfig] = None,
     ) -> None:
         self.model_config = model_config
         self.parallel_config = parallel_config
@@ -56,6 +58,7 @@ class Worker(WorkerBase):
         self.lora_config = lora_config
         self.driver_worker_rank = driver_worker_rank
         self.is_driver_worker = rank == driver_worker_rank
+        self.tensorizer_config = tensorizer_config
 
         self.vision_language_config = vision_language_config
         if self.vision_language_config:
@@ -71,7 +74,9 @@ class Worker(WorkerBase):
             rank=rank,
             kv_cache_dtype=self.cache_config.cache_dtype,
             driver_worker_rank=driver_worker_rank,
-            vision_language_config=vision_language_config)
+            vision_language_config=vision_language_config,
+            tensorizer_config=tensorizer_config,
+        )
         # Uninitialized cache engine. Will be initialized by
         # initialize_cache.
         self.cache_engine = None
