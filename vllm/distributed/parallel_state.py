@@ -143,8 +143,8 @@ def initialize_model_parallel(
         print(f"SANG-TODO ranks: {ranks}")
         print(f"SANG-TODO {num_tensor_model_parallel_groups=}")
         group = torch.distributed.new_group(ranks, backend=backend)
-        print(f"SANG-TODO {group=}")
         if rank in ranks:
+            print(f"SANG-TODO {rank=} sets a group {group=}")
             _TENSOR_MODEL_PARALLEL_GROUP = group
 
     # Build the pipeline model-parallel groups.

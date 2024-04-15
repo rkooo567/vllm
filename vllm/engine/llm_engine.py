@@ -234,6 +234,7 @@ class LLMEngine:
             initialize_ray_cluster(engine_config.parallel_config)
             if engine_config.parallel_config.enable_disaggregated_prefill:
                 from vllm.executor.disagg_executor import DisaggRayGpuExecutor
+                print("SANG-TODO initialize disagg executor.")
                 executor_class = DisaggRayGpuExecutor
             else:
                 from vllm.executor.ray_gpu_executor import RayGPUExecutor
@@ -746,17 +747,46 @@ class LLMEngine:
         return self._process_model_outputs(output, scheduler_outputs)
 
     def step_disagg(self) -> List[RequestOutput]:
-        seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
+        disagg_out = self.scheduler.schedule()
+        meta, out = disagg_out.prefill_schedule
+        decode_meta, decode_out = disagg_out.decode_schedule
+        print(f"prefill scheduled: {meta=}")
+        print(f"decode scheduled: {decode_meta=}")
+        print(f"send scheduled: {disagg_out.send_blocks=}")
+        print(f"recv scheduled: {disagg_out.recv_blocks=}")
 
-        if not scheduler_outputs.is_empty():
-            output = self.model_executor.execute_model(
-                seq_group_metadata_list, scheduler_outputs.blocks_to_swap_in,
-                scheduler_outputs.blocks_to_swap_out,
-                scheduler_outputs.blocks_to_copy)
-        else:
-            output = []
+        outputs = []
+        if disagg_out.has_prefill:
+            prefill_output = self.model_executor.execute_model(
+                meta,
+                "prefill",
+                out.blocks_to_swap_in,
+                out.blocks_to_swap_out,
+                out.blocks_to_copy,
+                blocks_to_send=disagg_out.send_blocks,
+            )
+            print(f"SANG-TODO execute prefill! {disagg_out.send_blocks}")
+            outputs = self._process_model_outputs(prefill_output, out)
+            self.scheduler.on_prefill_finish()
+        print(f"SANG-TODO outputs after prefill: {outputs}")
 
-        return self._process_model_outputs(output, scheduler_outputs)
+        if disagg_out.has_decode:
+            decode_output = self.model_executor.execute_model(
+                decode_meta,
+                "decode",
+                decode_out.blocks_to_swap_in,
+                decode_out.blocks_to_swap_out,
+                decode_out.blocks_to_copy,
+                blocks_to_recv=disagg_out.recv_blocks,
+            )
+
+            print(f"SANG-TODO execute decode! {disagg_out.recv_blocks=}")
+            outputs.extend(
+                self._process_model_outputs(decode_output, decode_out))
+            self.scheduler.on_decode_finish()
+        print(f"SANG-TODO outputs after decode: {outputs}")
+        print("SANG-TODO step done!")
+        return outputs
 
     def do_log_stats(self) -> None:
         """Forced log when no requests active."""

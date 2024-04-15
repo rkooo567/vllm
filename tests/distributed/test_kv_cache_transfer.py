@@ -139,6 +139,7 @@ def test_executor_kv_cache_transfer():
             config.lora_config,
             config.vision_language_config,
             config.speculative_config,
+            config.tensorizer_config,
         )
         # executor = RayGPUExecutor(
         #     config.model_config,

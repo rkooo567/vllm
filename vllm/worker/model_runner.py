@@ -166,7 +166,8 @@ class ModelRunner:
                 vision_language_config=self.vision_language_config,
                 parallel_config=self.parallel_config,
                 scheduler_config=self.scheduler_config,
-                tensorizer_config=self.tensorizer_config,)
+                tensorizer_config=self.tensorizer_config,
+            )
         logger.info(f"Loading model took {time.time() - s} seconds")
 
         self.model_memory_usage = m.consumed_memory

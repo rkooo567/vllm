@@ -119,6 +119,8 @@ class SchedulerOutputs:
     ignored_seq_groups: List[SequenceGroup]
     # The number of slots for lookahead decoding.
     num_lookahead_slots: int
+    blocks_to_send: Optional[List[int]] = None
+    blocks_to_recv: Optional[List[int]] = None
 
     def __post_init__(self):
         # Swap in and swap out should never happen at the same time.
@@ -145,6 +147,19 @@ class SchedulerOutputs:
             for g in self.scheduled_seq_groups
             if g.seq_group.lora_request is not None
         }
+
+    @staticmethod
+    def create_empty() -> "SchedulerOutputs":
+        return SchedulerOutputs(
+            scheduled_seq_groups=[],
+            num_prefill_groups=0,
+            num_batched_tokens=0,
+            blocks_to_swap_in={},
+            blocks_to_swap_out={},
+            blocks_to_copy={},
+            ignored_seq_groups=[],
+            num_lookahead_slots=0,
+        )
 
 
 @dataclass
@@ -607,9 +622,9 @@ class Scheduler:
             num_new_tokens = self._get_num_new_tokens(seq_group,
                                                       SequenceStatus.WAITING,
                                                       enable_chunking, budget)
-            if not enable_chunking:
-                num_prompt_tokens = waiting_seqs[0].get_len()
-                assert num_new_tokens == num_prompt_tokens
+            # if not enable_chunking:
+            # num_prompt_tokens = waiting_seqs[0].get_len()
+            # assert num_new_tokens == num_prompt_tokens
 
             if num_new_tokens > self.prompt_limit:
                 logger.warning(
@@ -676,7 +691,8 @@ class Scheduler:
             ignored_seq_groups=ignored_seq_groups,
             num_lookahead_slots=self._get_num_lookahead_slots(is_prefill=True))
 
-    def _schedule_default(self) -> SchedulerOutputs:
+    def _schedule_default(self, enable_prefill,
+                          enable_decode) -> SchedulerOutputs:
         """Schedule queued requests.
         
         The current policy is designed to optimize the throughput. First,
@@ -706,7 +722,7 @@ class Scheduler:
             self.swapped, SchedulerSwappedInOutputs.create_empty())
 
         # If any requests are swapped, prioritized swapped requests.
-        if not self.swapped:
+        if not self.swapped and enable_prefill:
             remaining_waiting, prefills = self._schedule_prefills(
                 self.waiting, budget, curr_loras, enable_chunking=False)
 
@@ -714,7 +730,7 @@ class Scheduler:
         # Don't schedule decodes if prefills are scheduled.
         # NOTE: If `_schedule_prefills` doesn't enable chunking, self.running
         # only contains decode requests, not chunked prefills.
-        if len(prefills.seq_groups) == 0:
+        if len(prefills.seq_groups) == 0 and enable_decode:
             remaining_running, running_scheduled = self._schedule_running(
                 self.running,
                 budget,
@@ -855,12 +871,12 @@ class Scheduler:
                                  swapped_in.num_lookahead_slots),
         )
 
-    def _schedule(self) -> SchedulerOutputs:
+    def _schedule(self, enable_prefill, enable_decode) -> SchedulerOutputs:
         """Schedule queued requests."""
         if self.scheduler_config.chunked_prefill_enabled:
             return self._schedule_chunked_prefill()
         else:
-            return self._schedule_default()
+            return self._schedule_default(enable_prefill, enable_decode)
 
     def _can_append_slots(self, seq_group: SequenceGroup) -> bool:
         """Determine whether or not we have enough space in the KV cache to
@@ -883,11 +899,15 @@ class Scheduler:
             num_lookahead_slots=self._get_num_lookahead_slots(is_prefill),
         )
 
-    def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
+    def schedule(
+        self,
+        enable_prefill=True,
+        enable_decode=True,
+    ) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
         # Schedule sequence groups.
         # This function call changes the internal states of the scheduler
         # such as self.running, self.swapped, and self.waiting.
-        scheduler_outputs = self._schedule()
+        scheduler_outputs = self._schedule(enable_prefill, enable_decode)
         now = time.time()
 
         # Create input data structures.

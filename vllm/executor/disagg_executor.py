@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from vllm.config import (CacheConfig, DeviceConfig, LoRAConfig, ModelConfig,
                          ParallelConfig, SchedulerConfig, SpeculativeConfig,
-                         VisionLanguageConfig)
+                         TensorizerConfig, VisionLanguageConfig)
 from vllm.engine.ray_utils import RayWorkerVllm, ray
 from vllm.executor.executor_base import ExecutorAsyncBase, ExecutorBase
 from vllm.logger import init_logger
@@ -42,6 +42,7 @@ class DisaggRayGpuExecutor(ExecutorBase):
         lora_config: Optional[LoRAConfig],
         vision_language_config: Optional[VisionLanguageConfig],
         speculative_config: Optional[SpeculativeConfig],
+        tensorizer_config: Optional[TensorizerConfig],
     ) -> None:
         self.model_config = model_config
         self.cache_config = cache_config
@@ -219,12 +220,13 @@ class DisaggRayGpuExecutor(ExecutorBase):
     def execute_model(
             self,
             seq_group_metadata_list: List[SequenceGroupMetadata],
+            worker_group: str,
             blocks_to_swap_in: Dict[int, int],
             blocks_to_swap_out: Dict[int, int],
             blocks_to_copy: Dict[int, List[int]],
             blocks_to_send: Optional[List[int]] = None,
             blocks_to_recv: Optional[List[int]] = None) -> SamplerOutput:
-        if seq_group_metadata_list[0].is_prompt:
+        if worker_group == "prefill":
             assert blocks_to_recv is None
             print("SANG-TODO execute prefill")
             output = self.prefill_executor.execute_model(

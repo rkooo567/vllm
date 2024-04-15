@@ -9,6 +9,7 @@ from vllm.sequence import (Sequence, SequenceGroup, SequenceStatus)
 
 logger = init_logger(__name__)
 
+
 class DisaggScheduleOutputs:
 
     def __init__(
@@ -36,20 +37,15 @@ class DisaggScheduleOutputs:
 
 class DisaggScheduler:
     """A Scheduler for prefill-decode disaggregation.
-
     It runs to two schedulers under the hood, with one for prefilling and
     another for decoding. Both schedulers manage the same number of
     workers each.
-
     Prefill scheduler can only do prefill, no decoding is allowed.
     The finished prefill requests will added into decode scheduler
     for prefill and decoding.
-
     Decode scheduler do both prefill and decode. However, the
     prefill will be treated as block transfer instead.
-
     There can be only 1 concurrent prefill and decoding at any time possible.
-
     The caller should trigger scheduling when a new prefill/decoding requests
     are finished.
     """
@@ -137,7 +133,8 @@ class DisaggScheduler:
         assert self.prefilling, "prefilling not scheduled"
         self.prefilling = False
         finished_request_ids = set()
-        for seq_group in self.ongoing_prefill_requests:
+        for scheduled_seq_group in self.ongoing_prefill_requests:
+            seq_group = scheduled_seq_group.seq_group
             if seq_group.is_finished():
                 finished_request_ids.add(seq_group.request_id)
             else:
@@ -166,9 +163,10 @@ class DisaggScheduler:
 
         # if we have new blocks to transfer, schedule prefill
         # for new blocks transfer
+        print("SANG-TODO block transfer schedule.")
         transfer_meta_list, transfer_output = self.decode_scheduler.schedule(
             enable_prefill=True, enable_decode=False)
-
+        print(f"SANG-TODO transfer meta list: {transfer_meta_list=}")
         if transfer_meta_list:
             self.decoding = True
 
@@ -185,11 +183,10 @@ class DisaggScheduler:
                 send_blocks.extend(_send)
                 recv_blocks.extend(_recv)
 
-        for seq_group in transfer_output.scheduled_seq_groups:
+        for scheduled_seq_group in transfer_output.scheduled_seq_groups:
             # assume 1 to 1 mapping between seq_group and seq
-            if seq_group.get_num_unprefilled() > 0:
-                self.transfering_request_ids.\
-                    append(seq_group.request_id)
+            seq_group = scheduled_seq_group.seq_group
+            self.transfering_request_ids.append(seq_group.request_id)
 
         return decoding_meta_list, decoding_output, send_blocks, recv_blocks
 
@@ -204,7 +201,7 @@ class DisaggScheduler:
                 self.transfering_request_ids)
         self.transfering_request_ids = None
 
-    def schedule(self) -> SchedulerOutputs:
+    def schedule(self):
         if self.decoding and self.prefilling:
             return DisaggScheduleOutputs()
 
@@ -227,6 +224,7 @@ class DisaggScheduler:
             transfer_new_blocks=self.has_pending_transfer())
         prefill_meta_list, prefill_output = self._schedule_prefill()
         if send_blocks:
+            print("SANG-TODO send blocks exist. Set prefill / decode True.")
             self.prefilling = True
             self.decoding = True
         return DisaggScheduleOutputs(

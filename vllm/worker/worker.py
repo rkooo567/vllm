@@ -242,16 +242,20 @@ class Worker(WorkerBase):
             blocks_to_send = data["blocks_to_send"]
             blocks_to_recv = data["blocks_to_recv"]
 
-        # Wait until block send is finished
-        # Before send is over, we should not modify the kv cache.
-        for req in self.blocks_sending:
-            req.wait()
-        self.blocks_sending.clear()
-
         if blocks_to_recv is not None:
             assert blocks_to_send is None
+            print(f"SANG-TODO recv blocks {blocks_to_recv=}")
             with torch.cuda.stream(self.block_stream):
                 self.cache_engine.recv_blocks(blocks_to_recv)
+
+        # The kv caches that are transferred should not be modified until
+        # the transfer completes. It should be guaranteed by the scheduler.
+        if blocks_to_send is not None:
+            print(f"SANG-TODO send blocks.. .{blocks_to_send}")
+            assert blocks_to_recv is None
+            with torch.cuda.stream(self.block_stream):
+                self.blocks_sending.extend(
+                    self.cache_engine.send_blocks(blocks_to_send))
 
         self.cache_swap(blocks_to_swap_in, blocks_to_swap_out, blocks_to_copy)
 
@@ -260,13 +264,15 @@ class Worker(WorkerBase):
             return {}
         print(f"SANG-TODO gpu cache: {self.gpu_cache is not None}")
 
+        print("SANG-TODO model execution start")
         output = self.model_runner.execute_model(seq_group_metadata_list,
                                                  self.gpu_cache)
+        print("SANG-TODO model execution done")
 
-        if blocks_to_send is not None:
-            with torch.cuda.stream(self.block_stream):
-                self.blocks_sending = self.cache_engine.send_blocks(
-                    blocks_to_send)
+        for req in self.blocks_sending:
+            print("SANG-TODO waiting to finish block sends")
+            req.wait()
+        self.blocks_sending.clear()
 
         return output
 
@@ -302,6 +308,7 @@ def init_worker_distributed_environment(
     local_rank: int = -1,
 ) -> None:
     """Initialize the distributed environment."""
+    print(f"SANG-TODO init dist env: {parallel_config.world_size=} {rank=}")
     init_distributed_environment(parallel_config.world_size, rank,
                                  distributed_init_method, local_rank)
 
@@ -333,6 +340,7 @@ def init_worker_distributed_environment(
     if not parallel_config.disable_custom_all_reduce:
         init_custom_ar()
 
+    print("SANG-TODO warming up!")
     # A small all_reduce for warmup.
     torch.distributed.all_reduce(torch.zeros(1).cuda())
     # Need to run warmup for send/recv.
@@ -346,6 +354,7 @@ def init_worker_distributed_environment(
 
     if pynccl_utils.is_initialized():
         pynccl_utils.all_reduce(torch.zeros(1).cuda())
+    print("SANG-TODO warming up done!")
 
 
 def _check_if_gpu_supports_dtype(torch_dtype: torch.dtype):

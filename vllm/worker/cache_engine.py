@@ -114,7 +114,9 @@ class CacheEngine:
         value_cache = self.gpu_cache[layer_idx][1]
         return key_cache, value_cache
 
-    def send_blocks(self, block_ids: List[int]) -> None:
+    def send_blocks(self, block_ids: List[int]) -> List[int]:
+        if len(block_ids) == 0:
+            return []
         # torch futures.
         reqs = []
         keys: List[torch.Tensor] = []
@@ -138,6 +140,8 @@ class CacheEngine:
 
     # SANG-TODO rename it with sync, async
     def recv_blocks(self, block_ids: List[int]) -> None:
+        if len(block_ids) == 0:
+            return
         kv_cache_shape = self.attn_backend.get_kv_cache_shape(
             self.num_gpu_blocks, self.block_size, self.num_heads,
             self.head_size)
