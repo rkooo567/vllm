@@ -151,42 +151,39 @@ class DisaggScheduler:
     def _schedule_decode(self, transfer_new_blocks: bool):
         assert not self.decoding, "decoding in progress"
 
-        # first scheduling decoding
+        send_blocks = []
+        recv_blocks = []
+
+        if transfer_new_blocks:
+            # if we have new blocks to transfer, schedule prefill
+            # for new blocks transfer
+            print("SANG-TODO block transfer schedule.")
+            transfer_meta_list, transfer_output = self.decode_scheduler.schedule(
+                enable_prefill=True, enable_decode=False)
+            print(f"SANG-TODO transfer meta list: {transfer_meta_list=}")
+            if transfer_meta_list:
+                self.decoding = True
+
+            for meta in transfer_meta_list:
+                prefill_blocks = self.prefill_request_blocks[meta.request_id]
+                decode_blocks = meta.block_tables
+                for seq_id, _send in prefill_blocks.items():
+                    # recv_blocks might contain one more block due to
+                    # the new token generated after prefill
+                    _recv = decode_blocks[seq_id][:len(_send)]
+                    send_blocks.extend(_send)
+                    recv_blocks.extend(_recv)
+
+            for scheduled_seq_group in transfer_output.scheduled_seq_groups:
+                # assume 1 to 1 mapping between seq_group and seq
+                seq_group = scheduled_seq_group.seq_group
+                self.transfering_request_ids.append(seq_group.request_id)
+
         decoding_meta_list, decoding_output = self.decode_scheduler.schedule(
             enable_prefill=False, enable_decode=True)
 
         if decoding_meta_list:
             self.decoding = True
-
-        if not transfer_new_blocks:
-            return decoding_meta_list, decoding_output, [], []
-
-        # if we have new blocks to transfer, schedule prefill
-        # for new blocks transfer
-        print("SANG-TODO block transfer schedule.")
-        transfer_meta_list, transfer_output = self.decode_scheduler.schedule(
-            enable_prefill=True, enable_decode=False)
-        print(f"SANG-TODO transfer meta list: {transfer_meta_list=}")
-        if transfer_meta_list:
-            self.decoding = True
-
-        send_blocks = []
-        recv_blocks = []
-
-        for meta in transfer_meta_list:
-            prefill_blocks = self.prefill_request_blocks[meta.request_id]
-            decode_blocks = meta.block_tables
-            for seq_id, _send in prefill_blocks.items():
-                # recv_blocks might contain one more block due to
-                # the new token generated after prefill
-                _recv = decode_blocks[seq_id][:len(_send)]
-                send_blocks.extend(_send)
-                recv_blocks.extend(_recv)
-
-        for scheduled_seq_group in transfer_output.scheduled_seq_groups:
-            # assume 1 to 1 mapping between seq_group and seq
-            seq_group = scheduled_seq_group.seq_group
-            self.transfering_request_ids.append(seq_group.request_id)
 
         return decoding_meta_list, decoding_output, send_blocks, recv_blocks
 
@@ -199,13 +196,15 @@ class DisaggScheduler:
         if self.transfering_request_ids:
             self.prefill_scheduler.abort_seq_group(
                 self.transfering_request_ids)
-        self.transfering_request_ids = None
+        self.transfering_request_ids = []
 
     def schedule(self):
         if self.decoding and self.prefilling:
+            assert False
             return DisaggScheduleOutputs()
 
         if self.decoding and not self.prefilling:
+            assert False
             if self.has_pending_transfer():
                 # delay prefill if there are transfers pending.
                 return DisaggScheduleOutputs()
@@ -214,6 +213,7 @@ class DisaggScheduler:
                 prefill_schedule=self._schedule_prefill())
 
         if self.prefilling and not self.decoding:
+            assert False
             meta_list, output, send_blocks, recv_blocks = self._schedule_decode(
                 transfer_new_blocks=False)
             return DisaggScheduleOutputs(decode_schedule=(meta_list, output),

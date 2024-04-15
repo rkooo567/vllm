@@ -674,6 +674,7 @@ class Scheduler:
             if curr_loras is not None and lora_int_id > 0:
                 curr_loras.add(lora_int_id)
             waiting_queue.popleft()
+            print(f"SANG-TODO popleft {len(waiting_queue)=}")
             self._allocate_and_set_running(seq_group, num_new_tokens)
             seq_groups.append(
                 ScheduledSequenceGroup(seq_group=seq_group,
@@ -682,6 +683,7 @@ class Scheduler:
             budget.add_num_seqs(seq_group.request_id, num_new_seqs)
 
         # Queue requests that couldn't be scheduled.
+        print(f"SANG-TODO {leftover_waiting_sequences=}")
         waiting_queue.extendleft(leftover_waiting_sequences)
         if len(seq_groups) > 0:
             self.prev_prompt = True
@@ -725,6 +727,7 @@ class Scheduler:
         if not self.swapped and enable_prefill:
             remaining_waiting, prefills = self._schedule_prefills(
                 self.waiting, budget, curr_loras, enable_chunking=False)
+            breakpoint()
 
         fcfs_policy = PolicyFactory.get_policy(policy_name="fcfs")
         # Don't schedule decodes if prefills are scheduled.
@@ -762,6 +765,8 @@ class Scheduler:
         # Update swapped requests.
         self.swapped = remaining_swapped
         self.swapped.extend(running_scheduled.swapped_out)
+        print(f"SANG-TODO waiting: {len(self.waiting)}")
+        print(f"SANG-TODO running: {len(self.running)}")
 
         # There should be no prefill from running queue because this policy
         # doesn't allow chunked prefills.

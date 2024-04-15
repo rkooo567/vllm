@@ -217,7 +217,7 @@ class Worker(WorkerBase):
             blocks_to_send: Optional[List[int]] = None,
             blocks_to_recv: Optional[List[int]] = None
     ) -> Optional[SamplerOutput]:
-        print("SANG-TODO execute model.")
+        # print("SANG-TODO execute model.")
         if self.is_driver_worker:
             assert seq_group_metadata_list is not None
             num_seq_groups = len(seq_group_metadata_list)
@@ -244,14 +244,14 @@ class Worker(WorkerBase):
 
         if blocks_to_recv is not None:
             assert blocks_to_send is None
-            print(f"SANG-TODO recv blocks {blocks_to_recv=}")
+            # print(f"SANG-TODO recv blocks {blocks_to_recv=}")
             with torch.cuda.stream(self.block_stream):
                 self.cache_engine.recv_blocks(blocks_to_recv)
 
         # The kv caches that are transferred should not be modified until
         # the transfer completes. It should be guaranteed by the scheduler.
         if blocks_to_send is not None:
-            print(f"SANG-TODO send blocks.. .{blocks_to_send}")
+            # print(f"SANG-TODO send blocks.. .{blocks_to_send}")
             assert blocks_to_recv is None
             with torch.cuda.stream(self.block_stream):
                 self.blocks_sending.extend(
@@ -262,15 +262,15 @@ class Worker(WorkerBase):
         # If there is no input, we don't need to execute the model.
         if num_seq_groups == 0:
             return {}
-        print(f"SANG-TODO gpu cache: {self.gpu_cache is not None}")
+        # print(f"SANG-TODO gpu cache: {self.gpu_cache is not None}")
 
-        print("SANG-TODO model execution start")
+        # print("SANG-TODO model execution start")
         output = self.model_runner.execute_model(seq_group_metadata_list,
                                                  self.gpu_cache)
-        print("SANG-TODO model execution done")
+        # print("SANG-TODO model execution done")
 
         for req in self.blocks_sending:
-            print("SANG-TODO waiting to finish block sends")
+            # print("SANG-TODO waiting to finish block sends")
             req.wait()
         self.blocks_sending.clear()
 

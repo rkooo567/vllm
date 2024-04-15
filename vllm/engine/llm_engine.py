@@ -767,8 +767,6 @@ class LLMEngine:
             )
             print(f"SANG-TODO execute prefill! {disagg_out.send_blocks}")
             outputs = self._process_model_outputs(prefill_output, out)
-            self.scheduler.on_prefill_finish()
-        print(f"SANG-TODO outputs after prefill: {outputs}")
 
         if disagg_out.has_decode:
             decode_output = self.model_executor.execute_model(
@@ -783,9 +781,12 @@ class LLMEngine:
             print(f"SANG-TODO execute decode! {disagg_out.recv_blocks=}")
             outputs.extend(
                 self._process_model_outputs(decode_output, decode_out))
+
+        if disagg_out.has_prefill:
+            self.scheduler.on_prefill_finish()
+        if disagg_out.has_decode:
             self.scheduler.on_decode_finish()
-        print(f"SANG-TODO outputs after decode: {outputs}")
-        print("SANG-TODO step done!")
+        print("SANG-TODO step done!\n")
         return outputs
 
     def do_log_stats(self) -> None:
