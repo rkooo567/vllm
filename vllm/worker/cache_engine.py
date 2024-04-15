@@ -1,5 +1,5 @@
 """CacheEngine class for managing the KV cache."""
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import torch
 
@@ -7,6 +7,8 @@ from vllm.attention import get_attn_backend
 from vllm.config import CacheConfig, ModelConfig, ParallelConfig
 from vllm.logger import init_logger
 from vllm.utils import STR_DTYPE_TO_TORCH_DTYPE, is_pin_memory_available
+from vllm.distributed.parallel_state import (
+    get_stage_model_parallel_next_rank, get_stage_model_parallel_prev_rank)
 
 logger = init_logger(__name__)
 
@@ -48,6 +50,12 @@ class CacheEngine:
         # Initialize the cache.
         self.gpu_cache = self._allocate_kv_cache(self.num_gpu_blocks, "cuda")
         self.cpu_cache = self._allocate_kv_cache(self.num_cpu_blocks, "cpu")
+
+    def _get_kv_cache_shape(self):
+        return self.attn_backend.get_kv_cache_shape(self.num_gpu_blocks,
+                                                    self.block_size,
+                                                    self.num_heads,
+                                                    self.head_size)
 
     def _allocate_kv_cache(
         self,
@@ -99,6 +107,76 @@ class CacheEngine:
             dtype = STR_DTYPE_TO_TORCH_DTYPE[cache_config.cache_dtype]
         dtype_size = _get_dtype_size(dtype)
         return dtype_size * total
+
+    def _get_kv_cache_to_send_recv(
+            self, layer_idx) -> Tuple[torch.Tensor, torch.Tensor, Tuple[int]]:
+        key_cache = self.gpu_cache[layer_idx][0]
+        value_cache = self.gpu_cache[layer_idx][1]
+        return key_cache, value_cache
+
+    def send_blocks(self, block_ids: List[int]) -> List[int]:
+        if len(block_ids) == 0:
+            return []
+        # torch futures.
+        reqs = []
+        keys: List[torch.Tensor] = []
+        values: List[torch.Tensor] = []
+        for block_id in block_ids:
+            for i in range(self.num_layers):
+                key_cache, value_cache = self._get_kv_cache_to_send_recv(i)
+                keys.append(key_cache[block_id])
+                values.append(value_cache[block_id])
+
+        key_tensor = torch.stack(tuple(keys))
+        value_tensor = torch.stack(tuple(values))
+        print(f"SANG-TODO next rank: {get_stage_model_parallel_next_rank()=}")
+        reqs.append(
+            torch.distributed.isend(key_tensor,
+                                    dst=get_stage_model_parallel_next_rank()))
+        reqs.append(
+            torch.distributed.isend(value_tensor,
+                                    dst=get_stage_model_parallel_next_rank()))
+        return reqs
+
+    # SANG-TODO rename it with sync, async
+    def recv_blocks(self, block_ids: List[int]) -> None:
+        if len(block_ids) == 0:
+            return
+        kv_cache_shape = self.attn_backend.get_kv_cache_shape(
+            self.num_gpu_blocks, self.block_size, self.num_heads,
+            self.head_size)
+        reqs = []
+        # SANG-TODO hacky fix it.
+        key_tensor: torch.Tensor = torch.empty(
+            size=(self.num_layers * len(block_ids), *kv_cache_shape[2:]),
+            dtype=self.dtype,
+            device=self.gpu_cache[0].device,
+        )
+        value_tensor: torch.Tensor = torch.empty(
+            size=(self.num_layers * len(block_ids), *kv_cache_shape[2:]),
+            dtype=self.dtype,
+            device=self.gpu_cache[0].device,
+        )
+
+        reqs.append(
+            torch.distributed.irecv(key_tensor,
+                                    src=get_stage_model_parallel_prev_rank()))
+        reqs.append(
+            torch.distributed.irecv(value_tensor,
+                                    src=get_stage_model_parallel_prev_rank()))
+
+        for req in reqs:
+            req.wait()
+
+        offset = 0
+        for block_id in block_ids:
+            for i in range(self.num_layers):
+                self.gpu_cache[i][0][block_id].copy_(key_tensor[offset])
+                self.gpu_cache[i][1][block_id].copy_(value_tensor[offset])
+                offset += 1
+
+                # print(f"{self.gpu_cache[i][0][block_id]=}")
+                # print(f"{self.gpu_cache[i][1][block_id]=}")
 
 
 def _get_dtype_size(dtype: torch.dtype) -> int:

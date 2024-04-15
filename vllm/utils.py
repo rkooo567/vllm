@@ -272,6 +272,7 @@ def get_open_port() -> int:
 
 def set_cuda_visible_devices(device_ids: List[int]) -> None:
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, device_ids))
+    print(f"SANG-TODO {os.environ['CUDA_VISIBLE_DEVICES']=}")
 
 
 def chunk_list(lst, chunk_size):

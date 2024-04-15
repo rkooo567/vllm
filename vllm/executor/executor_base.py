@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Tuple
 
 from vllm.config import (CacheConfig, DeviceConfig, LoRAConfig, ModelConfig,
                          ParallelConfig, SchedulerConfig, SpeculativeConfig,
-                         VisionLanguageConfig)
+                         VisionLanguageConfig, TensorizerConfig)
 from vllm.lora.request import LoRARequest
 from vllm.sequence import SamplerOutput, SequenceGroupMetadata
 
@@ -27,6 +27,7 @@ class ExecutorBase(ABC):
         lora_config: Optional[LoRAConfig],
         vision_language_config: Optional[VisionLanguageConfig],
         speculative_config: Optional[SpeculativeConfig],
+        tensorizer_config: Optional[TensorizerConfig],
     ) -> None:
         raise NotImplementedError
 
@@ -54,11 +55,14 @@ class ExecutorBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def execute_model(self,
-                      seq_group_metadata_list: List[SequenceGroupMetadata],
-                      blocks_to_swap_in: Dict[int, int],
-                      blocks_to_swap_out: Dict[int, int],
-                      blocks_to_copy: Dict[int, List[int]]) -> SamplerOutput:
+    def execute_model(
+            self,
+            seq_group_metadata_list: List[SequenceGroupMetadata],
+            blocks_to_swap_in: Dict[int, int],
+            blocks_to_swap_out: Dict[int, int],
+            blocks_to_copy: Dict[int, List[int]],
+            blocks_to_send: Optional[List[int]] = None,
+            blocks_to_recv: Optional[List[int]] = None) -> SamplerOutput:
         """Executes one model step on the given sequences."""
         raise NotImplementedError
 

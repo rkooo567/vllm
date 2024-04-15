@@ -1,6 +1,7 @@
 import time
 from typing import Iterable, List, Optional, Tuple, Type, Union
 
+from joblib import parallel_config
 from transformers import PreTrainedTokenizer
 
 import vllm
@@ -8,6 +9,7 @@ from vllm.config import (CacheConfig, DeviceConfig, LoRAConfig, ModelConfig,
                          ParallelConfig, SchedulerConfig, SpeculativeConfig,
                          TensorizerConfig, VisionLanguageConfig)
 from vllm.core.scheduler import Scheduler, SchedulerOutputs
+from vllm.core.disagg_scheduler import DisaggScheduler
 from vllm.engine.arg_utils import EngineArgs
 from vllm.engine.metrics import StatLogger, Stats
 from vllm.engine.ray_utils import initialize_ray_cluster
@@ -118,7 +120,7 @@ class LLMEngine:
         self.detokenizer = Detokenizer(self.tokenizer)
         self.seq_counter = Counter()
 
-        self.model_executor = executor_class(
+        self.model_executor: ExecutorBase = executor_class(
             model_config=model_config,
             cache_config=cache_config,
             parallel_config=parallel_config,
@@ -165,6 +167,8 @@ class LLMEngine:
                     model_config.enforce_eager,
                     "disable_custom_all_reduce":
                     parallel_config.disable_custom_all_reduce,
+                    "enable_disaggregated_prefill":
+                    parallel_config.enable_disaggregated_prefill,
                 })
 
         # Ping the tokenizer to ensure liveness if it runs in a
@@ -174,7 +178,13 @@ class LLMEngine:
         # Create the scheduler.
         # NOTE: the cache_config here have been updated with the numbers of
         # GPU and CPU blocks, which are profiled in the distributed executor.
-        self.scheduler = Scheduler(scheduler_config, cache_config, lora_config)
+        # SANG-TODO cache_config is per scheduler / executor.
+        if parallel_config.enable_disaggregated_prefill:
+            self.scheduler = DisaggScheduler(scheduler_config, cache_config,
+                                             lora_config)
+        else:
+            self.scheduler = Scheduler(scheduler_config, cache_config,
+                                       lora_config)
 
         # Metric Logging.
         if self.log_stats:
@@ -222,8 +232,13 @@ class LLMEngine:
             executor_class = CPUExecutor
         elif engine_config.parallel_config.worker_use_ray:
             initialize_ray_cluster(engine_config.parallel_config)
-            from vllm.executor.ray_gpu_executor import RayGPUExecutor
-            executor_class = RayGPUExecutor
+            if engine_config.parallel_config.enable_disaggregated_prefill:
+                from vllm.executor.disagg_executor import DisaggRayGpuExecutor
+                print("SANG-TODO initialize disagg executor.")
+                executor_class = DisaggRayGpuExecutor
+            else:
+                from vllm.executor.ray_gpu_executor import RayGPUExecutor
+                executor_class = RayGPUExecutor
         else:
             assert engine_config.parallel_config.world_size == 1, (
                 "Ray is required if parallel_config.world_size > 1.")
@@ -716,6 +731,9 @@ class LLMEngine:
             >>>     if not (engine.has_unfinished_requests() or example_inputs):
             >>>         break
         """
+        if self.parallel_config.enable_disaggregated_prefill:
+            return self.step_disagg()
+
         seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
 
         if not scheduler_outputs.is_empty():
@@ -727,6 +745,49 @@ class LLMEngine:
             output = []
 
         return self._process_model_outputs(output, scheduler_outputs)
+
+    def step_disagg(self) -> List[RequestOutput]:
+        disagg_out = self.scheduler.schedule()
+        meta, out = disagg_out.prefill_schedule
+        decode_meta, decode_out = disagg_out.decode_schedule
+        print(f"prefill scheduled: {meta=}")
+        print(f"decode scheduled: {decode_meta=}")
+        print(f"send scheduled: {disagg_out.send_blocks=}")
+        print(f"recv scheduled: {disagg_out.recv_blocks=}")
+
+        outputs = []
+        if disagg_out.has_prefill:
+            prefill_output = self.model_executor.execute_model(
+                meta,
+                "prefill",
+                out.blocks_to_swap_in,
+                out.blocks_to_swap_out,
+                out.blocks_to_copy,
+                blocks_to_send=disagg_out.send_blocks,
+            )
+            print(f"SANG-TODO execute prefill! {disagg_out.send_blocks}")
+            outputs = self._process_model_outputs(prefill_output, out)
+
+        if disagg_out.has_decode:
+            decode_output = self.model_executor.execute_model(
+                decode_meta,
+                "decode",
+                decode_out.blocks_to_swap_in,
+                decode_out.blocks_to_swap_out,
+                decode_out.blocks_to_copy,
+                blocks_to_recv=disagg_out.recv_blocks,
+            )
+
+            print(f"SANG-TODO execute decode! {disagg_out.recv_blocks=}")
+            outputs.extend(
+                self._process_model_outputs(decode_output, decode_out))
+
+        if disagg_out.has_prefill:
+            self.scheduler.on_prefill_finish()
+        if disagg_out.has_decode:
+            self.scheduler.on_decode_finish()
+        print("SANG-TODO step done!\n")
+        return outputs
 
     def do_log_stats(self) -> None:
         """Forced log when no requests active."""

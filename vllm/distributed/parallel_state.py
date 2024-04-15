@@ -16,6 +16,11 @@ logger = init_logger(__name__)
 _TENSOR_MODEL_PARALLEL_GROUP = None
 # Pipeline model parallel group that the current rank belongs to.
 _PIPELINE_MODEL_PARALLEL_GROUP = None
+# Stage parallel group that the current rank belongs to.
+_STAGE_PARALLEL_GROUP = None
+_PREFILL_GLOBAL_RANKS = None
+_DECODE_GLOBAL_RANKS = None
+_GLOBAL_RANKS = None
 
 # when people blindly call `torch.distributed.all_reduce` etc,
 # it will use this group. It is initialized with the `backend`
@@ -81,6 +86,7 @@ def initialize_model_parallel(
     tensor_model_parallel_size: int = 1,
     pipeline_model_parallel_size: int = 1,
     backend: Optional[str] = None,
+    enable_disaggregated_prefill: bool = False,
 ) -> None:
     """
     Initialize model parallel groups.
@@ -109,19 +115,23 @@ def initialize_model_parallel(
     world_size: int = torch.distributed.get_world_size()
     # get the backend of _DEVICE_WORLD_GROUP
     backend = backend or torch.distributed.get_backend()
-
-    if (world_size !=
-            tensor_model_parallel_size * pipeline_model_parallel_size):
+    stage_size = 2 if enable_disaggregated_prefill else 1
+    # SANG-TODO update error msg.
+    if (world_size != tensor_model_parallel_size *
+            pipeline_model_parallel_size * stage_size):
         raise RuntimeError(
             f"world_size ({world_size}) is not equal to "
             f"tensor_model_parallel_size ({tensor_model_parallel_size}) x "
-            f"pipeline_model_parallel_size ({pipeline_model_parallel_size})")
+            f"pipeline_model_parallel_size ({pipeline_model_parallel_size}) x "
+            f"stage_size ({stage_size})")
 
     num_tensor_model_parallel_groups: int = (world_size //
                                              tensor_model_parallel_size)
     num_pipeline_model_parallel_groups: int = (world_size //
                                                pipeline_model_parallel_size)
     rank = torch.distributed.get_rank()
+    global _GLOBAL_RANKS
+    _GLOBAL_RANKS = list(range(world_size))
 
     # Build the tensor model-parallel groups.
     global _TENSOR_MODEL_PARALLEL_GROUP
@@ -130,13 +140,17 @@ def initialize_model_parallel(
     for i in range(num_tensor_model_parallel_groups):
         ranks = range(i * tensor_model_parallel_size,
                       (i + 1) * tensor_model_parallel_size)
+        print(f"SANG-TODO ranks: {ranks}")
+        print(f"SANG-TODO {num_tensor_model_parallel_groups=}")
         group = torch.distributed.new_group(ranks, backend=backend)
         if rank in ranks:
+            print(f"SANG-TODO {rank=} sets a group {group=}")
             _TENSOR_MODEL_PARALLEL_GROUP = group
 
     # Build the pipeline model-parallel groups.
     global _PIPELINE_MODEL_PARALLEL_GROUP
     global _PIPELINE_GLOBAL_RANKS
+
     assert _PIPELINE_MODEL_PARALLEL_GROUP is None, (
         "pipeline model parallel group is already initialized")
     for i in range(num_pipeline_model_parallel_groups):
@@ -146,11 +160,32 @@ def initialize_model_parallel(
             _PIPELINE_MODEL_PARALLEL_GROUP = group
             _PIPELINE_GLOBAL_RANKS = ranks
 
+    if enable_disaggregated_prefill:
+        # SANG-TODO Allow to do M:N mapping.
+        global _STAGE_PARALLEL_GROUP
+        global _PREFILL_GLOBAL_RANKS
+        global _DECODE_GLOBAL_RANKS
+        prefill_ranks = range(world_size // 2)
+        decode_ranks = range(world_size // 2, world_size)
+        _PREFILL_GLOBAL_RANKS = list(prefill_ranks)
+        _DECODE_GLOBAL_RANKS = list(decode_ranks)
+
+        prefill_group = torch.distributed.new_group(range(world_size // 2))
+        decode_group = torch.distributed.new_group(
+            range(world_size // 2, world_size))
+        if rank < world_size // 2:
+            _STAGE_PARALLEL_GROUP = prefill_group
+        else:
+            _STAGE_PARALLEL_GROUP = decode_group
+    else:
+        _STAGE_PARALLEL_GROUP = torch.distributed.group.WORLD
+
 
 def ensure_model_parallel_initialized(
     tensor_model_parallel_size: int,
     pipeline_model_parallel_size: int,
     backend: Optional[str] = None,
+    enable_disaggregated_prefill: bool = False,
 ) -> None:
     """Helper to initialize model parallel groups if they are not initialized,
     or ensure tensor-parallel and pipeline-parallel sizes are equal to expected
@@ -159,8 +194,12 @@ def ensure_model_parallel_initialized(
     # get the backend of _DEVICE_WORLD_GROUP
     backend = backend or torch.distributed.get_backend()
     if not model_parallel_is_initialized():
-        initialize_model_parallel(tensor_model_parallel_size,
-                                  pipeline_model_parallel_size, backend)
+        initialize_model_parallel(
+            tensor_model_parallel_size,
+            pipeline_model_parallel_size,
+            backend,
+            enable_disaggregated_prefill,
+        )
         return
 
     assert (
@@ -173,6 +212,8 @@ def ensure_model_parallel_initialized(
         "pipeline parallel group already initialized, but of unexpected size: "
         f"{get_pipeline_model_parallel_world_size()=} vs. "
         f"{pipeline_model_parallel_size=}")
+    assert (
+        get_tensor_model_parallel_world_size() == tensor_model_parallel_size)
 
 
 def model_parallel_is_initialized():
@@ -201,6 +242,11 @@ def get_pipeline_model_parallel_group():
     return _PIPELINE_MODEL_PARALLEL_GROUP
 
 
+def get_stage_parallel_group():
+    # SANG-TODO docstring
+    return _STAGE_PARALLEL_GROUP
+
+
 def get_tensor_model_parallel_world_size():
     """Return world size for the tensor model parallel group."""
     return torch.distributed.get_world_size(
@@ -213,15 +259,24 @@ def get_pipeline_model_parallel_world_size():
         group=get_pipeline_model_parallel_group())
 
 
+def get_stage_parallel_world_size():
+    return torch.distributed.get_world_size(group=get_stage_parallel_group())
+
+
 def get_tensor_model_parallel_rank():
     """Return my rank for the tensor model parallel group."""
-    return torch.distributed.get_rank(group=get_tensor_model_parallel_group())
+    rank = torch.distributed.get_rank(group=get_tensor_model_parallel_group())
+    return rank
 
 
 def get_pipeline_model_parallel_rank():
     """Return my rank for the pipeline model parallel group."""
     return torch.distributed.get_rank(
         group=get_pipeline_model_parallel_group())
+
+
+def get_stage_parallel_rank():
+    return torch.distributed.get_rank(group=get_stage_parallel_group())
 
 
 def get_tensor_model_parallel_src_rank():
@@ -267,6 +322,22 @@ def get_pipeline_model_parallel_prev_rank():
     return _PIPELINE_GLOBAL_RANKS[(rank_in_pipeline - 1) % world_size]
 
 
+def get_stage_model_parallel_next_rank():
+    assert _GLOBAL_RANKS is not None, (
+        "Stage parallel group is not initialized")
+    rank = torch.distributed.get_rank()
+    world_size = torch.distributed.get_world_size()
+    return _GLOBAL_RANKS[(rank + world_size // 2) % world_size]
+
+
+def get_stage_model_parallel_prev_rank():
+    assert _GLOBAL_RANKS is not None, (
+        "Stage parallel group is not initialized")
+    rank = torch.distributed.get_rank()
+    world_size = torch.distributed.get_world_size()
+    return _GLOBAL_RANKS[(rank - world_size // 2) % world_size]
+
+
 def destroy_model_parallel():
     """Set the groups to none and destroy them."""
     global _TENSOR_MODEL_PARALLEL_GROUP
@@ -277,8 +348,18 @@ def destroy_model_parallel():
     if _PIPELINE_MODEL_PARALLEL_GROUP:
         torch.distributed.destroy_process_group(_PIPELINE_MODEL_PARALLEL_GROUP)
     _PIPELINE_MODEL_PARALLEL_GROUP = None
+    global _STAGE_PARALLEL_GROUP
+    if _STAGE_PARALLEL_GROUP:
+        torch.distributed.destroy_process_group(_STAGE_PARALLEL_GROUP)
+    _STAGE_PARALLEL_GROUP = None
     global _PIPELINE_GLOBAL_RANKS
     _PIPELINE_GLOBAL_RANKS = None
+    global _PREFILL_GLOBAL_RANKS
+    global _DECODE_GLOBAL_RANKS
+    _PREFILL_GLOBAL_RANKS = None
+    _DECODE_GLOBAL_RANKS = None
+    global _GLOBAL_RANKS
+    _GLOBAL_RANKS = None
     from vllm.distributed.device_communicators import pynccl_utils
 
     # Destroy the pynccl states if any.

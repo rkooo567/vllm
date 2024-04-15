@@ -501,6 +501,7 @@ class ParallelConfig:
         tokenizer_pool_config: Optional[TokenizerPoolConfig] = None,
         ray_workers_use_nsight: bool = False,
         placement_group: Optional["PlacementGroup"] = None,
+        enable_disaggregated_prefill: bool = False,
     ) -> None:
         self.pipeline_parallel_size = pipeline_parallel_size
         self.tensor_parallel_size = tensor_parallel_size
@@ -510,8 +511,15 @@ class ParallelConfig:
         self.tokenizer_pool_config = tokenizer_pool_config
         self.ray_workers_use_nsight = ray_workers_use_nsight
         self.placement_group = placement_group
+        self.enable_disaggregated_prefill = enable_disaggregated_prefill
+        if self.enable_disaggregated_prefill:
+            stage_size = 2
+            self.worker_use_ray = True
+            self.disable_custom_all_reduce = True
+        else:
+            stage_size = 1
 
-        self.world_size = pipeline_parallel_size * self.tensor_parallel_size
+        self.world_size = pipeline_parallel_size * self.tensor_parallel_size * stage_size
         if self.world_size > 1:
             self.worker_use_ray = True
         self._verify_args()
@@ -534,6 +542,12 @@ class ParallelConfig:
         if self.ray_workers_use_nsight and not self.worker_use_ray:
             raise ValueError("Unable to use nsight profiling unless workers "
                              "run with Ray.")
+
+    def __repr__(self):
+        result = ""
+        for attr_name, attr_value in self.__dict__.items():
+            result += f"{attr_name}={attr_value}\n"
+        return result
 
 
 class SchedulerConfig:
@@ -611,6 +625,8 @@ class SchedulerConfig:
                 "num_lookahead_slots "
                 f"({self.num_lookahead_slots}) must be greater than or "
                 "equal to 0.")
+
+        # SANG-TODO Verify if beam search is used or ray is not used.
 
 
 class DeviceConfig:

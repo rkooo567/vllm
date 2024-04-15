@@ -7,7 +7,8 @@ from torch.distributed import ProcessGroup
 from .parallel_state import (get_tensor_model_parallel_group,
                              get_tensor_model_parallel_rank,
                              get_tensor_model_parallel_world_size,
-                             is_pynccl_enabled_for_all_reduce)
+                             is_pynccl_enabled_for_all_reduce,
+                             get_stage_parallel_group)
 
 
 def tensor_model_parallel_all_reduce(input_: torch.Tensor) -> torch.Tensor:
@@ -107,7 +108,7 @@ def broadcast(input_: torch.Tensor,
               src: int = 0,
               group: Optional[ProcessGroup] = None):
     """Broadcast the input tensor."""
-    group = group or torch.distributed.group.WORLD
+    group = group or get_stage_parallel_group()
     ranks = torch.distributed.get_process_group_ranks(group)
     assert src in ranks, f"Invalid src rank ({src})"
 
@@ -124,7 +125,7 @@ def broadcast_object_list(obj_list: List[Any],
                           src: int = 0,
                           group: Optional[ProcessGroup] = None):
     """Broadcast the input object list."""
-    group = group or torch.distributed.group.WORLD
+    group = group or get_stage_parallel_group()
     ranks = torch.distributed.get_process_group_ranks(group)
     assert src in ranks, f"Invalid src rank ({src})"
 
@@ -146,7 +147,7 @@ def broadcast_tensor_dict(
     group: Optional[ProcessGroup] = None,
 ) -> Optional[Dict[Any, Union[torch.Tensor, Any]]]:
     """Broadcast the input tensor dictionary."""
-    group = group or torch.distributed.group.WORLD
+    group = group or get_stage_parallel_group()
     ranks = torch.distributed.get_process_group_ranks(group)
     assert src in ranks, f"Invalid src rank ({src})"
 

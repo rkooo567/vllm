@@ -296,6 +296,7 @@ class VllmRunner:
         tensor_parallel_size: int = 1,
         block_size: int = 16,
         enable_chunked_prefill: bool = False,
+        enable_disaggregated_prefill: bool = False,
         **kwargs,
     ) -> None:
         self.model = LLM(
@@ -309,6 +310,7 @@ class VllmRunner:
             max_model_len=max_model_len,
             block_size=block_size,
             enable_chunked_prefill=enable_chunked_prefill,
+            enable_disaggregated_prefill=enable_disaggregated_prefill,
             **kwargs,
         )
 
