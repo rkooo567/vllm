@@ -34,8 +34,9 @@ LORA_WARMUP_RANK = 8
 _BATCH_SIZE_ALIGNMENT = 8
 # Capture graphs for token size 1, 2, 4, 8, 16, 24, 32, 40, ..., 256.
 # NOTE: _get_graph_batch_size needs to be updated if this list is changed.
+MAX_BATCH_SIZE = 256
 _BATCH_SIZES_TO_CAPTURE = [1, 2, 4] + [
-    _BATCH_SIZE_ALIGNMENT * i for i in range(1, 33)
+    _BATCH_SIZE_ALIGNMENT * i for i in range(1, MAX_BATCH_SIZE // _BATCH_SIZE_ALIGNMENT)
 ]
 
 
