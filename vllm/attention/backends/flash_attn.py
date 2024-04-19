@@ -8,13 +8,16 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Type
 
 import torch
-from flash_attn import flash_attn_varlen_func
+from flash_attn import (flash_attn_with_page_attention,
+                        flash_attn_varlen_with_page_attention,
+                        flash_attn_varlen_func)
 
 from vllm.attention.backends.abstract import (AttentionBackend, AttentionImpl,
                                               AttentionMetadata,
                                               AttentionMetadataPerStage)
 from vllm.attention.ops.paged_attn import (PagedAttention,
                                            PagedAttentionMetadata)
+from vllm._C import cache_ops
 
 
 class FlashAttentionBackend(AttentionBackend):
@@ -34,8 +37,9 @@ class FlashAttentionBackend(AttentionBackend):
         num_kv_heads: int,
         head_size: int,
     ) -> Tuple[int, ...]:
-        return PagedAttention.get_kv_cache_shape(num_blocks, block_size,
-                                                 num_kv_heads, head_size)
+        # return PagedAttention.get_kv_cache_shape(num_blocks, block_size,
+        #                                          num_kv_heads, head_size)
+        return (2, num_blocks, block_size, num_kv_heads, head_size)
 
     @staticmethod
     def swap_blocks(
@@ -43,14 +47,24 @@ class FlashAttentionBackend(AttentionBackend):
         dst_kv_cache: torch.Tensor,
         src_to_dst: Dict[int, int],
     ) -> None:
-        PagedAttention.swap_blocks(src_kv_cache, dst_kv_cache, src_to_dst)
+        # PagedAttention.swap_blocks(src_kv_cache, dst_kv_cache, src_to_dst)
+        src_key_cache = src_kv_cache[0]
+        dst_key_cache = dst_kv_cache[0]
+        cache_ops.swap_blocks(src_key_cache, dst_key_cache, src_to_dst)
+
+        src_value_cache = src_kv_cache[1]
+        dst_value_cache = dst_kv_cache[1]
+        cache_ops.swap_blocks(src_value_cache, dst_value_cache, src_to_dst)
 
     @staticmethod
     def copy_blocks(
         kv_caches: List[torch.Tensor],
         src_to_dists: Dict[int, List[int]],
     ) -> None:
-        PagedAttention.copy_blocks(kv_caches, src_to_dists)
+        # PagedAttention.copy_blocks(kv_caches, src_to_dists)
+        key_caches = [kv_cache[0] for kv_cache in kv_caches]
+        value_caches = [kv_cache[1] for kv_cache in kv_caches]
+        cache_ops.copy_blocks(key_caches, value_caches, src_to_dists)
 
 
 @dataclass
@@ -150,7 +164,7 @@ class FlashAttentionImpl(AttentionImpl):
         assert self.num_heads % self.num_kv_heads == 0
         self.num_queries_per_kv = self.num_heads // self.num_kv_heads
 
-        suppored_head_sizes = PagedAttention.get_supported_head_sizes()
+        suppored_head_sizes = [32, 64, 96, 128, 160, 192, 224, 256]
         if head_size not in suppored_head_sizes:
             raise ValueError(
                 f"Head size {head_size} is not supported by PagedAttention. "
@@ -183,17 +197,26 @@ class FlashAttentionImpl(AttentionImpl):
         value = value.view(-1, self.num_kv_heads, self.head_size)
 
         if kv_cache is not None:
-            key_cache, value_cache = PagedAttention.split_kv_cache(
-                kv_cache, self.num_kv_heads, self.head_size)
+            # key_cache, value_cache = PagedAttention.split_kv_cache(
+            #     kv_cache, self.num_kv_heads, self.head_size)
+            key_cache, value_cache = kv_cache[0], kv_cache[1]
 
             # Reshape the input keys and values and store them in the cache.
             # If kv_cache is not provided, the new key and value tensors are
             # not cached. This happens during the initial memory profiling run.
-            PagedAttention.write_to_paged_cache(key, value, key_cache,
-                                                value_cache,
-                                                attn_metadata.slot_mapping,
-                                                attn_metadata.kv_cache_dtype,
-                                                kv_scale)
+            # PagedAttention.write_to_paged_cache(key, value, key_cache,
+            #                                     value_cache,
+            #                                     attn_metadata.slot_mapping,
+            #                                     attn_metadata.kv_cache_dtype,
+            #                                     kv_scale)
+            cache_ops.reshape_and_cache_flash(
+                key,
+                value,
+                key_cache,
+                value_cache,
+                attn_metadata.slot_mapping.flatten(),
+                attn_metadata.kv_cache_dtype,
+            )
 
         num_prefill_tokens = attn_metadata.num_prefill_tokens
         num_decode_tokens = attn_metadata.num_decode_tokens
@@ -237,33 +260,63 @@ class FlashAttentionImpl(AttentionImpl):
                 # TODO(Hai) this triton kernel has regression issue (broke) to
                 # deal with different data types between KV and FP8 KV cache,
                 # to be addressed separately.
-                output[:num_prefill_tokens] = PagedAttention.forward_prefix(
-                    query,
-                    key,
-                    value,
-                    key_cache,
-                    value_cache,
-                    prefill_meta.block_tables,
-                    prefill_meta.subquery_start_loc,
-                    prefill_meta.prompt_lens_tensor,
-                    prefill_meta.context_lens,
-                    prefill_meta.max_subquery_len,
-                    self.alibi_slopes,
+                # output[:num_prefill_tokens] = PagedAttention.forward_prefix(
+                #     query,
+                #     key,
+                #     value,
+                #     key_cache,
+                #     value_cache,
+                #     prefill_meta.block_tables,
+                #     prefill_meta.subquery_start_loc,
+                #     prefill_meta.prompt_lens_tensor,
+                #     prefill_meta.context_lens,
+                #     prefill_meta.max_subquery_len,
+                #     self.alibi_slopes,
+                # )
+                output[:num_prefill_tokens] = flash_attn_varlen_with_page_attention(
+                    q=query,
+                    k=key_cache,
+                    v=value_cache,
+                    cu_seqlens_q=prefill_meta.seq_start_loc,
+                    cu_seqlens_k=prefill_meta.context_lens,  # FIXME
+                    max_seqlen_q=prefill_meta.max_prompt_len,
+                    max_seqlen_k=prefill_meta.max_context_len,
+                    softmax_scale=self.scale,
+                    causal=True,
+                    window_size=self.sliding_window,
+                    alibi_slopes=self.alibi_slopes,
+                    block_table=prefill_meta.block_tables,
                 )
         if decode_meta := attn_metadata.decode_metadata:
             # Decoding run.
-            output[num_prefill_tokens:] = PagedAttention.forward_decode(
+            # output[num_prefill_tokens:] = PagedAttention.forward_decode(
+            #     decode_query,
+            #     key_cache,
+            #     value_cache,
+            #     decode_meta.block_tables,
+            #     decode_meta.context_lens,
+            #     decode_meta.max_context_len,
+            #     attn_metadata.kv_cache_dtype,
+            #     self.num_kv_heads,
+            #     self.scale,
+            #     self.alibi_slopes,
+            #     kv_scale,
+            # )
+            output[:num_prefill_tokens] = flash_attn_with_page_attention(
                 decode_query,
                 key_cache,
                 value_cache,
-                decode_meta.block_tables,
+                attn_metadata.block_tables,
+                None,  # key
+                None,  # value
+                None,  # cos
+                None,  # sin
                 decode_meta.context_lens,
-                decode_meta.max_context_len,
-                attn_metadata.kv_cache_dtype,
-                self.num_kv_heads,
-                self.scale,
-                self.alibi_slopes,
-                kv_scale,
+                None,  # cache_batch_idx
+                softmax_scale=self.scale,
+                causal=True,
+                window_size=(-1, -1),
+                rotary_interleaved=False,
             )
 
         # Reshape the output tensor.
