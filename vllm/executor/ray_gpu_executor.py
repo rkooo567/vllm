@@ -249,14 +249,24 @@ class RayGPUExecutor(ExecutorBase):
         if num_prefill > 0:
             self.p_latencies.append(elapsed_ms)
         
-        if len(self.latencies) > 0:
-            print(f"decode mean: {sum(self.latencies) / len(self.latencies)} ms")
-        if len(self.p_latencies) > 0:
-            print(f"prefill mean: {sum(self.p_latencies) / len(self.p_latencies)} ms")
-        
         # Only the driver worker returns the sampling results.
         output = all_outputs[0]
         return output
+
+    def print_perf(self):
+        self.latencies.sort()
+        self.p_latencies.sort()
+        if len(self.latencies) > 0:
+            print(f"decode mean: {sum(self.latencies) / len(self.latencies)} ms")
+            print(f"decode p50: {self.latencies[int(len(self.latencies) * 0.5)]} ms")
+            print(f"decode p95: {self.latencies[int(len(self.latencies) * 0.95)]} ms")
+            print(f"decode p99: {self.latencies[int(len(self.latencies) * 0.99)]} ms")
+        if len(self.p_latencies) > 0:
+            print(f"prefill mean: {sum(self.p_latencies) / len(self.p_latencies)} ms")
+            print(f"prefill p50: {self.p_latencies[int(len(self.p_latencies) * 0.5)]} ms")
+            print(f"prefill p95: {self.p_latencies[int(len(self.p_latencies) * 0.95)]} ms")
+            print(f"prefill p99: {self.p_latencies[int(len(self.p_latencies) * 0.99)]} ms")
+
 
     def add_lora(self, lora_request: LoRARequest) -> bool:
         assert lora_request.lora_int_id > 0, "lora_id must be greater than 0."
