@@ -233,7 +233,6 @@ class FlashAttentionImpl(AttentionImpl):
 
         assert query.shape[0] == num_prefill_tokens
         assert decode_query.shape[0] == num_decode_tokens
-
         if prefill_meta := attn_metadata.prefill_metadata:
             # Prompt run.
             if kv_cache is None or prefill_meta.block_tables.numel() == 0:
@@ -251,7 +250,6 @@ class FlashAttentionImpl(AttentionImpl):
                     softmax_scale=self.scale,
                     causal=True,
                     window_size=self.sliding_window,
-                    alibi_slopes=self.alibi_slopes,
                 )
                 assert output[:num_prefill_tokens].shape == out.shape
                 output[:num_prefill_tokens] = out
@@ -277,6 +275,7 @@ class FlashAttentionImpl(AttentionImpl):
                     q=query,
                     k=key_cache,
                     v=value_cache,
+                    block_table=prefill_meta.block_tables,
                     cu_seqlens_q=prefill_meta.seq_start_loc,
                     cu_seqlens_k=prefill_meta.context_lens,  # FIXME
                     max_seqlen_q=prefill_meta.max_prompt_len,
@@ -284,8 +283,6 @@ class FlashAttentionImpl(AttentionImpl):
                     softmax_scale=self.scale,
                     causal=True,
                     window_size=self.sliding_window,
-                    alibi_slopes=self.alibi_slopes,
-                    block_table=prefill_meta.block_tables,
                 )
         if decode_meta := attn_metadata.decode_metadata:
             # Decoding run.
@@ -302,11 +299,11 @@ class FlashAttentionImpl(AttentionImpl):
             #     self.alibi_slopes,
             #     kv_scale,
             # )
-            output[:num_prefill_tokens] = flash_attn_with_page_attention(
-                decode_query,
+            output[num_prefill_tokens:] = flash_attn_with_page_attention(
+                decode_query.view(decode_query.shape[0], 1, decode_query.shape[1], decode_query.shape[2]),
                 key_cache,
                 value_cache,
-                attn_metadata.block_tables,
+                decode_meta.block_tables,
                 None,  # key
                 None,  # value
                 None,  # cos
@@ -317,7 +314,7 @@ class FlashAttentionImpl(AttentionImpl):
                 causal=True,
                 window_size=(-1, -1),
                 rotary_interleaved=False,
-            )
+            ).view(decode_query.shape[0], decode_query.shape[1], decode_query.shape[2])
 
         # Reshape the output tensor.
         return output.view(num_tokens, hidden_size)
