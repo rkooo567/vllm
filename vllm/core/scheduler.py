@@ -728,6 +728,8 @@ class Scheduler:
 
             # If any sequence group is preempted, do not swap in any sequence
             # group. because it means there's no slot for new running requests.
+            if len(running_scheduled.preempted) > 0:
+                print("SANG-TOOD preempted!!! BAD!!!")
             if len(running_scheduled.preempted) + len(
                     running_scheduled.swapped_out) == 0:
                 remaining_swapped, swapped_in = self._schedule_swapped(
@@ -888,6 +890,7 @@ class Scheduler:
         # This function call changes the internal states of the scheduler
         # such as self.running, self.swapped, and self.waiting.
         scheduler_outputs = self._schedule()
+        # print(f"SANG-TODO prefill num: {scheduler_outputs.num_prefill_groups}")
         now = time.time()
 
         # Create input data structures.
@@ -942,7 +945,7 @@ class Scheduler:
         for scheduled_seq_group in scheduler_outputs.scheduled_seq_groups:
             self.block_manager.mark_blocks_as_computed(
                 scheduled_seq_group.seq_group)
-
+        # print(f"SANG-TODO batch size: {len(seq_group_metadata_list)}")
         return seq_group_metadata_list, scheduler_outputs
 
     def fork_seq(self, parent_seq: Sequence, child_seq: Sequence) -> None:

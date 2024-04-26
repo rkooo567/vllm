@@ -47,6 +47,8 @@ class RayGPUExecutor(ExecutorBase):
         self.forward_dag = None
         if USE_RAY_COMPILED_DAG:
             self.forward_dag = self._compiled_ray_dag()
+        self.latencies = []
+        self.p_latencies = []
 
     def _configure_ray_workers_use_nsight(self,
                                           ray_remote_kwargs) -> Dict[str, Any]:
@@ -230,6 +232,13 @@ class RayGPUExecutor(ExecutorBase):
                       blocks_to_swap_out: Dict[int, int],
                       blocks_to_copy: Dict[int, List[int]],
                       num_lookahead_slots: int = 0) -> SamplerOutput:
+        num_decode = 0
+        num_prefill = 0
+        for s in seq_group_metadata_list:
+            num_decode += not s.is_prompt
+            num_prefill += s.is_prompt
+        import time
+        s = time.time()
         all_outputs = self._run_workers(
             "execute_model",
             driver_kwargs={
@@ -239,10 +248,31 @@ class RayGPUExecutor(ExecutorBase):
                 "blocks_to_copy": blocks_to_copy,
             },
             use_ray_compiled_dag=USE_RAY_COMPILED_DAG)
-
+        elapsed_ms = (time.time() - s) * 1000
+        # print(f"{num_decode=} {num_prefill=} {elapsed_ms} ms to execute the model")
+        if num_decode > 0:
+            self.latencies.append(elapsed_ms)
+        if num_prefill > 0:
+            self.p_latencies.append(elapsed_ms)
+        
         # Only the driver worker returns the sampling results.
         output = all_outputs[0]
         return output
+
+    def print_perf(self):
+        self.latencies.sort()
+        self.p_latencies.sort()
+        if len(self.latencies) > 0:
+            print(f"decode mean: {sum(self.latencies) / len(self.latencies)} ms")
+            print(f"decode p50: {self.latencies[int(len(self.latencies) * 0.5)]} ms")
+            print(f"decode p95: {self.latencies[int(len(self.latencies) * 0.95)]} ms")
+            print(f"decode p99: {self.latencies[int(len(self.latencies) * 0.99)]} ms")
+        if len(self.p_latencies) > 0:
+            print(f"prefill mean: {sum(self.p_latencies) / len(self.p_latencies)} ms")
+            print(f"prefill p50: {self.p_latencies[int(len(self.p_latencies) * 0.5)]} ms")
+            print(f"prefill p95: {self.p_latencies[int(len(self.p_latencies) * 0.95)]} ms")
+            print(f"prefill p99: {self.p_latencies[int(len(self.p_latencies) * 0.99)]} ms")
+
 
     def add_lora(self, lora_request: LoRARequest) -> bool:
         assert lora_request.lora_int_id > 0, "lora_id must be greater than 0."

@@ -1,0 +1,200 @@
+\n===================\nRunning without --enforce-eager --batch-size 1 -tp 8 --model facebook/opt-13b\n===================\n
+Namespace(model='facebook/opt-13b', tensor_parallel_size=8, input_len=64, output_len=2, batch_size=1, enforce_eager=False)
+
+=======
+BATCH_SIZE=1 PROMPT_LEN=64 OUTPUT_LEN=2 ENABLE_CUDA=True TP=8
+=======
+
+INFO 04-22 05:21:17 llm_engine.py:87] Initializing an LLM engine (v0.4.0.post1) with config: model='facebook/opt-13b', speculative_config=None, tokenizer='facebook/opt-13b', tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=8, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, quantization_param_path=None, device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='outlines'), seed=0)
+INFO 04-22 05:21:46 utils.py:569] Found nccl from library /home/ray/.config/vllm/nccl/cu12/libnccl.so.2.18.1
+ERROR 04-22 05:21:46 worker_base.py:139] Error executing method init_worker. This might cause deadlock in distributed execution.
+ERROR 04-22 05:21:46 worker_base.py:139] Traceback (most recent call last):
+ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 131, in execute_method
+ERROR 04-22 05:21:46 worker_base.py:139]     return executor(*args, **kwargs)
+ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 121, in init_worker
+ERROR 04-22 05:21:46 worker_base.py:139]     mod = importlib.import_module(self.worker_module_name)
+ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/anaconda3/lib/python3.9/importlib/__init__.py", line 127, in import_module
+ERROR 04-22 05:21:46 worker_base.py:139]     return _bootstrap._gcd_import(name[level:], package, level)
+ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1030, in _gcd_import
+ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1007, in _find_and_load
+ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 986, in _find_and_load_unlocked
+ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 680, in _load_unlocked
+ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap_external>", line 850, in exec_module
+ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 228, in _call_with_frames_removed
+ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker.py", line 22, in <module>
+ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.worker.model_runner import ModelRunner
+ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/model_runner.py", line 22, in <module>
+ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.model_loader import get_model
+ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/__init__.py", line 7, in <module>
+ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.model_loader.loader import (BaseModelLoader,
+ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/loader.py", line 21, in <module>
+ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.model_loader.weight_utils import (
+ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/weight_utils.py", line 23, in <module>
+ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.layers.quantization.schema import QuantParamSchema
+ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/layers/quantization/schema.py", line 16, in <module>
+ERROR 04-22 05:21:46 worker_base.py:139]     from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator
+ERROR 04-22 05:21:46 worker_base.py:139] ImportError: cannot import name 'ValidationInfo' from 'pydantic' (/home/ray/anaconda3/lib/python3.9/site-packages/pydantic/__init__.cpython-39-x86_64-linux-gnu.so)
+[36m(RayWorkerWrapper pid=264158)[0m INFO 04-22 05:21:46 utils.py:569] Found nccl from library /home/ray/.config/vllm/nccl/cu12/libnccl.so.2.18.1
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139] Error executing method init_worker. This might cause deadlock in distributed execution.
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139] Traceback (most recent call last):
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 131, in execute_method
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]     return executor(*args, **kwargs)
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/anaconda3/lib/python3.9/site-packages/ray/util/tracing/tracing_helper.py", line 467, in _resume_span
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]     return method(self, *_args, **_kwargs)
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 121, in init_worker
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]     mod = importlib.import_module(self.worker_module_name)
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/anaconda3/lib/python3.9/importlib/__init__.py", line 127, in import_module
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]     return _bootstrap._gcd_import(name[level:], package, level)
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1030, in _gcd_import
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1007, in _find_and_load
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 986, in _find_and_load_unlocked
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 680, in _load_unlocked
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap_external>", line 850, in exec_module
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 228, in _call_with_frames_removed
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker.py", line 22, in <module>
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.worker.model_runner import ModelRunner
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/model_runner.py", line 22, in <module>
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.model_loader import get_model
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/__init__.py", line 7, in <module>
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.model_loader.loader import (BaseModelLoader,
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/loader.py", line 21, in <module>
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.model_loader.weight_utils import (
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/weight_utils.py", line 23, in <module>
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.layers.quantization.schema import QuantParamSchema
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/layers/quantization/schema.py", line 16, in <module>
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator
+[36m(RayWorkerWrapper pid=264158)[0m ERROR 04-22 05:21:46 worker_base.py:139] ImportError: cannot import name 'ValidationInfo' from 'pydantic' (/home/ray/anaconda3/lib/python3.9/site-packages/pydantic/__init__.cpython-39-x86_64-linux-gnu.so)
+[36m(RayWorkerWrapper pid=264791)[0m INFO 04-22 05:21:46 utils.py:569] Found nccl from library /home/ray/.config/vllm/nccl/cu12/libnccl.so.2.18.1[32m [repeated 6x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139] Error executing method init_worker. This might cause deadlock in distributed execution.[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139] Traceback (most recent call last):[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 131, in execute_method[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]     return executor(*args, **kwargs)[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/anaconda3/lib/python3.9/site-packages/ray/util/tracing/tracing_helper.py", line 467, in _resume_span[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]     return method(self, *_args, **_kwargs)[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 121, in init_worker[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]     mod = importlib.import_module(self.worker_module_name)[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/anaconda3/lib/python3.9/importlib/__init__.py", line 127, in import_module[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]     return _bootstrap._gcd_import(name[level:], package, level)[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1030, in _gcd_import[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1007, in _find_and_load[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 986, in _find_and_load_unlocked[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 680, in _load_unlocked[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap_external>", line 850, in exec_module[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 228, in _call_with_frames_removed[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker.py", line 22, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.worker.model_runner import ModelRunner[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/model_runner.py", line 22, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.model_loader import get_model[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/__init__.py", line 7, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.model_loader.loader import (BaseModelLoader,[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/loader.py", line 21, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.model_loader.weight_utils import ([32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/weight_utils.py", line 23, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from vllm.model_executor.layers.quantization.schema import QuantParamSchema[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/layers/quantization/schema.py", line 16, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139]     from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=264791)[0m ERROR 04-22 05:21:46 worker_base.py:139] ImportError: cannot import name 'ValidationInfo' from 'pydantic' (/home/ray/anaconda3/lib/python3.9/site-packages/pydantic/__init__.cpython-39-x86_64-linux-gnu.so)[32m [repeated 6x across cluster][0m
+\n===================\nRunning without --enforce-eager --batch-size 2 -tp 8 --model facebook/opt-13b\n===================\n
+Namespace(model='facebook/opt-13b', tensor_parallel_size=8, input_len=64, output_len=2, batch_size=2, enforce_eager=False)
+
+=======
+BATCH_SIZE=2 PROMPT_LEN=64 OUTPUT_LEN=2 ENABLE_CUDA=True TP=8
+=======
+
+INFO 04-22 05:22:05 llm_engine.py:87] Initializing an LLM engine (v0.4.0.post1) with config: model='facebook/opt-13b', speculative_config=None, tokenizer='facebook/opt-13b', tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=8, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, quantization_param_path=None, device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='outlines'), seed=0)
+INFO 04-22 05:22:34 utils.py:569] Found nccl from library /home/ray/.config/vllm/nccl/cu12/libnccl.so.2.18.1
+[36m(RayWorkerWrapper pid=265587)[0m INFO 04-22 05:22:34 utils.py:569] Found nccl from library /home/ray/.config/vllm/nccl/cu12/libnccl.so.2.18.1
+ERROR 04-22 05:22:34 worker_base.py:139] Error executing method init_worker. This might cause deadlock in distributed execution.
+ERROR 04-22 05:22:34 worker_base.py:139] Traceback (most recent call last):
+ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 131, in execute_method
+ERROR 04-22 05:22:34 worker_base.py:139]     return executor(*args, **kwargs)
+ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 121, in init_worker
+ERROR 04-22 05:22:34 worker_base.py:139]     mod = importlib.import_module(self.worker_module_name)
+ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/anaconda3/lib/python3.9/importlib/__init__.py", line 127, in import_module
+ERROR 04-22 05:22:34 worker_base.py:139]     return _bootstrap._gcd_import(name[level:], package, level)
+ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1030, in _gcd_import
+ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1007, in _find_and_load
+ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 986, in _find_and_load_unlocked
+ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 680, in _load_unlocked
+ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap_external>", line 850, in exec_module
+ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 228, in _call_with_frames_removed
+ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker.py", line 22, in <module>
+ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.worker.model_runner import ModelRunner
+ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/model_runner.py", line 22, in <module>
+ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.model_loader import get_model
+ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/__init__.py", line 7, in <module>
+ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.model_loader.loader import (BaseModelLoader,
+ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/loader.py", line 21, in <module>
+ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.model_loader.weight_utils import (
+ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/weight_utils.py", line 23, in <module>
+ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.layers.quantization.schema import QuantParamSchema
+ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/layers/quantization/schema.py", line 16, in <module>
+ERROR 04-22 05:22:34 worker_base.py:139]     from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator
+ERROR 04-22 05:22:34 worker_base.py:139] ImportError: cannot import name 'ValidationInfo' from 'pydantic' (/home/ray/anaconda3/lib/python3.9/site-packages/pydantic/__init__.cpython-39-x86_64-linux-gnu.so)
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139] Error executing method init_worker. This might cause deadlock in distributed execution.
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139] Traceback (most recent call last):
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 131, in execute_method
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]     return executor(*args, **kwargs)
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/anaconda3/lib/python3.9/site-packages/ray/util/tracing/tracing_helper.py", line 467, in _resume_span
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]     return method(self, *_args, **_kwargs)
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 121, in init_worker
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]     mod = importlib.import_module(self.worker_module_name)
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/anaconda3/lib/python3.9/importlib/__init__.py", line 127, in import_module
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]     return _bootstrap._gcd_import(name[level:], package, level)
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1030, in _gcd_import
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1007, in _find_and_load
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 986, in _find_and_load_unlocked
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 680, in _load_unlocked
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap_external>", line 850, in exec_module
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 228, in _call_with_frames_removed
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker.py", line 22, in <module>
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.worker.model_runner import ModelRunner
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/model_runner.py", line 22, in <module>
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.model_loader import get_model
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/__init__.py", line 7, in <module>
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.model_loader.loader import (BaseModelLoader,
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/loader.py", line 21, in <module>
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.model_loader.weight_utils import (
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/weight_utils.py", line 23, in <module>
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.layers.quantization.schema import QuantParamSchema
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/layers/quantization/schema.py", line 16, in <module>
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator
+[36m(RayWorkerWrapper pid=265587)[0m ERROR 04-22 05:22:34 worker_base.py:139] ImportError: cannot import name 'ValidationInfo' from 'pydantic' (/home/ray/anaconda3/lib/python3.9/site-packages/pydantic/__init__.cpython-39-x86_64-linux-gnu.so)
+[36m(RayWorkerWrapper pid=266181)[0m INFO 04-22 05:22:34 utils.py:569] Found nccl from library /home/ray/.config/vllm/nccl/cu12/libnccl.so.2.18.1[32m [repeated 6x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139] Error executing method init_worker. This might cause deadlock in distributed execution.[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139] Traceback (most recent call last):[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 131, in execute_method[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]     return executor(*args, **kwargs)[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/anaconda3/lib/python3.9/site-packages/ray/util/tracing/tracing_helper.py", line 467, in _resume_span[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]     return method(self, *_args, **_kwargs)[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker_base.py", line 121, in init_worker[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]     mod = importlib.import_module(self.worker_module_name)[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/anaconda3/lib/python3.9/importlib/__init__.py", line 127, in import_module[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]     return _bootstrap._gcd_import(name[level:], package, level)[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1030, in _gcd_import[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 1007, in _find_and_load[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 986, in _find_and_load_unlocked[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 680, in _load_unlocked[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap_external>", line 850, in exec_module[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "<frozen importlib._bootstrap>", line 228, in _call_with_frames_removed[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/worker.py", line 22, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.worker.model_runner import ModelRunner[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/worker/model_runner.py", line 22, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.model_loader import get_model[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/__init__.py", line 7, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.model_loader.loader import (BaseModelLoader,[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/loader.py", line 21, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.model_loader.weight_utils import ([32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/model_loader/weight_utils.py", line 23, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from vllm.model_executor.layers.quantization.schema import QuantParamSchema[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]   File "/home/ray/default/vllm/vllm/model_executor/layers/quantization/schema.py", line 16, in <module>[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139]     from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator[32m [repeated 6x across cluster][0m
+[36m(RayWorkerWrapper pid=266181)[0m ERROR 04-22 05:22:34 worker_base.py:139] ImportError: cannot import name 'ValidationInfo' from 'pydantic' (/home/ray/anaconda3/lib/python3.9/site-packages/pydantic/__init__.cpython-39-x86_64-linux-gnu.so)[32m [repeated 6x across cluster][0m
+\n===================\nRunning without --enforce-eager --batch-size 4 -tp 8 --model facebook/opt-13b\n===================\n
+Namespace(model='facebook/opt-13b', tensor_parallel_size=8, input_len=64, output_len=2, batch_size=4, enforce_eager=False)
+
+=======
+BATCH_SIZE=4 PROMPT_LEN=64 OUTPUT_LEN=2 ENABLE_CUDA=True TP=8
+=======
+
+INFO 04-22 05:22:53 llm_engine.py:87] Initializing an LLM engine (v0.4.0.post1) with config: model='facebook/opt-13b', speculative_config=None, tokenizer='facebook/opt-13b', tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=8, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, quantization_param_path=None, device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='outlines'), seed=0)
