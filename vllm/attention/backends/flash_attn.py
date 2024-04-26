@@ -275,7 +275,7 @@ class FlashAttentionImpl(AttentionImpl):
                     q=query,
                     k=key_cache,
                     v=value_cache,
-                    block_table=prefill_meta.block_tables,
+                    prefill_meta.block_tables,
                     cu_seqlens_q=prefill_meta.seq_start_loc,
                     cu_seqlens_k=prefill_meta.context_lens,  # FIXME
                     max_seqlen_q=prefill_meta.max_prompt_len,
