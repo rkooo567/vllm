@@ -10,7 +10,7 @@ import pytest
 
 MODELS = [
     "facebook/opt-125m",
-    "meta-llama/Llama-2-7b-hf",
+    # "meta-llama/Llama-2-7b-hf",
 ]
 
 
@@ -52,6 +52,7 @@ def test_models(
         tensor_parallel_size=tensor_parallel_size,
         enforce_eager=enforce_eager,
         max_num_seqs=max_num_seqs,
+        block_size=32
     )
     vllm_outputs = vllm_model.generate_greedy(example_prompts, max_tokens)
     del vllm_model

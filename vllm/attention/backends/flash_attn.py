@@ -272,14 +272,14 @@ class FlashAttentionImpl(AttentionImpl):
                 #     self.alibi_slopes,
                 # )
                 output[:num_prefill_tokens] = flash_attn_varlen_with_page_attention(
-                    q=query,
-                    k=key_cache,
-                    v=value_cache,
+                    query,
+                    key_cache,
+                    value_cache,
                     prefill_meta.block_tables,
-                    cu_seqlens_q=prefill_meta.seq_start_loc,
-                    cu_seqlens_k=prefill_meta.context_lens,  # FIXME
-                    max_seqlen_q=prefill_meta.max_prompt_len,
-                    max_seqlen_k=prefill_meta.max_context_len,
+                    prefill_meta.seq_start_loc,
+                    prefill_meta.context_lens,  # FIXME
+                    prefill_meta.max_prompt_len,
+                    prefill_meta.max_context_len,
                     softmax_scale=self.scale,
                     causal=True,
                     window_size=self.sliding_window,
