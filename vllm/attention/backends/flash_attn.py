@@ -4,6 +4,7 @@ NOTE(woosuk): At the moment, this file includes a lot of duplicated code from
 XFormers backend. The duplicated code will be removed once we use flash-attn or
 flashinfer for all the attention operations.
 """
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Type
 
@@ -190,12 +191,14 @@ class FlashAttentionImpl(AttentionImpl):
         Returns:
             shape = [num_tokens, num_heads * head_size]
         """
+        g = time.time()
         num_tokens, hidden_size = query.shape
         # Reshape the query, key, and value tensors.
         query = query.view(-1, self.num_heads, self.head_size)
         key = key.view(-1, self.num_kv_heads, self.head_size)
         value = value.view(-1, self.num_kv_heads, self.head_size)
 
+        # s = time.time()
         if kv_cache is not None:
             # key_cache, value_cache = PagedAttention.split_kv_cache(
             #     kv_cache, self.num_kv_heads, self.head_size)
@@ -217,6 +220,7 @@ class FlashAttentionImpl(AttentionImpl):
                 attn_metadata.slot_mapping.flatten(),
                 attn_metadata.kv_cache_dtype,
             )
+        # print("kv cache write takes", (time.time() - s) * 1000 * 1000, "us")
 
         num_prefill_tokens = attn_metadata.num_prefill_tokens
         num_decode_tokens = attn_metadata.num_decode_tokens
@@ -258,6 +262,7 @@ class FlashAttentionImpl(AttentionImpl):
                 # TODO(Hai) this triton kernel has regression issue (broke) to
                 # deal with different data types between KV and FP8 KV cache,
                 # to be addressed separately.
+                # s = time.time()
                 # output[:num_prefill_tokens] = PagedAttention.forward_prefix(
                 #     query,
                 #     key,
@@ -271,6 +276,8 @@ class FlashAttentionImpl(AttentionImpl):
                 #     prefill_meta.max_subquery_len,
                 #     self.alibi_slopes,
                 # )
+                # print("ctx prefill", (time.time() - s) * 1000 * 1000, "us")
+                # s = time.time()
                 output[:num_prefill_tokens] = flash_attn_varlen_with_page_attention(
                     query,
                     key_cache,
@@ -284,8 +291,10 @@ class FlashAttentionImpl(AttentionImpl):
                     causal=True,
                     window_size=self.sliding_window,
                 )
+                # print("ctx prefill", (time.time() - s) * 1000 * 1000, "us")
         if decode_meta := attn_metadata.decode_metadata:
             # Decoding run.
+            # s = time.time()
             # output[num_prefill_tokens:] = PagedAttention.forward_decode(
             #     decode_query,
             #     key_cache,
@@ -299,6 +308,8 @@ class FlashAttentionImpl(AttentionImpl):
             #     self.alibi_slopes,
             #     kv_scale,
             # )
+            # print("decode ", (time.time() - s) * 1000 * 1000, "us")
+            s = time.time()
             output[num_prefill_tokens:] = flash_attn_with_page_attention(
                 decode_query.view(decode_query.shape[0], 1, decode_query.shape[1], decode_query.shape[2]),
                 key_cache,
@@ -314,7 +325,10 @@ class FlashAttentionImpl(AttentionImpl):
                 causal=True,
                 window_size=(-1, -1),
                 rotary_interleaved=False,
+
             ).view(decode_query.shape[0], decode_query.shape[1], decode_query.shape[2])
+            print("decode ", (time.time() - s) * 1000 * 1000, "us")
 
         # Reshape the output tensor.
+        # print("e2e takes ", (time.time() - g) * 1000 * 1000, "us")
         return output.view(num_tokens, hidden_size)
