@@ -276,10 +276,10 @@ class FlashAttentionImpl(AttentionImpl):
                     key_cache,
                     value_cache,
                     prefill_meta.block_tables,
+                    prefill_meta.subquery_start_loc,
                     prefill_meta.seq_start_loc,
-                    prefill_meta.context_lens,  # FIXME
+                    prefill_meta.max_subquery_len,
                     prefill_meta.max_prompt_len,
-                    prefill_meta.max_context_len,
                     softmax_scale=self.scale,
                     causal=True,
                     window_size=self.sliding_window,
