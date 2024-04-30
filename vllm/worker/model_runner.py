@@ -740,7 +740,10 @@ class ModelRunner:
         }
         if self.vision_language_config:
             execute_model_kwargs.update({"image_input": multi_modal_input})
+        s = time.time()
         hidden_states = model_executable(**execute_model_kwargs)
+        torch.cuda.synchronize()
+        print(f"e2e takes {(time.time() - s) * 1000} ms")
 
         # Compute the logits.
         logits = self.model.compute_logits(hidden_states, sampling_metadata)

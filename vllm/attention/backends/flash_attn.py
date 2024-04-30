@@ -191,7 +191,7 @@ class FlashAttentionImpl(AttentionImpl):
         Returns:
             shape = [num_tokens, num_heads * head_size]
         """
-        g = time.time()
+        # g = time.time()
         num_tokens, hidden_size = query.shape
         # Reshape the query, key, and value tensors.
         query = query.view(-1, self.num_heads, self.head_size)
@@ -309,7 +309,7 @@ class FlashAttentionImpl(AttentionImpl):
             #     kv_scale,
             # )
             # print("decode ", (time.time() - s) * 1000 * 1000, "us")
-            s = time.time()
+            # s = time.time()
             output[num_prefill_tokens:] = flash_attn_with_page_attention(
                 decode_query.view(decode_query.shape[0], 1, decode_query.shape[1], decode_query.shape[2]),
                 key_cache,
@@ -325,9 +325,8 @@ class FlashAttentionImpl(AttentionImpl):
                 causal=True,
                 window_size=(-1, -1),
                 rotary_interleaved=False,
-
             ).view(decode_query.shape[0], decode_query.shape[1], decode_query.shape[2])
-            print("decode ", (time.time() - s) * 1000 * 1000, "us")
+            # print("decode ", (time.time() - s) * 1000 * 1000, "us")
 
         # Reshape the output tensor.
         # print("e2e takes ", (time.time() - g) * 1000 * 1000, "us")
