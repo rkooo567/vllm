@@ -1,6 +1,6 @@
+import os
 import time
 from typing import Iterable, List, Optional, Type, Union
-import os
 
 from transformers import GenerationConfig, PreTrainedTokenizer
 

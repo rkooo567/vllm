@@ -1,5 +1,5 @@
-import os
 import copy
+import os
 import subprocess
 import sys
 import time
@@ -48,8 +48,10 @@ def api_server(tokenizer_pool_size: int, engine_use_ray: bool,
               "redirection.")
         env = copy.deepcopy(os.environ)
         env["VLLM_LOCAL_LOGGING_INTERVAL_SEC"] = "1"
-        # uvicorn_process = subprocess.Popen(commands, stdout=f, stderr=f, env=env)
-        uvicorn_process = subprocess.Popen(commands)
+        uvicorn_process = subprocess.Popen(commands,
+                                           stdout=f,
+                                           stderr=f,
+                                           env=env)
         yield
         f.seek(0)
         content = f.read().decode('utf-8')
