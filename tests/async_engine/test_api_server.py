@@ -1,3 +1,5 @@
+import copy
+import os
 import subprocess
 import sys
 import time
@@ -39,8 +41,21 @@ def api_server(tokenizer_pool_size: int, engine_use_ray: bool,
         commands.append("--engine-use-ray")
     if worker_use_ray:
         commands.append("--worker-use-ray")
-    uvicorn_process = subprocess.Popen(commands)
-    yield
+    import tempfile
+    with tempfile.NamedTemporaryFile() as f:
+        print(f"Logs are written to a temp file {f.name} to check stdout. "
+              "If you want to debug, please remove the stdout/stderr "
+              "redirection.")
+        env = copy.deepcopy(os.environ)
+        env["VLLM_LOCAL_LOGGING_INTERVAL_SEC"] = "1"
+        uvicorn_process = subprocess.Popen(commands,
+                                           stdout=f,
+                                           stderr=f,
+                                           env=env)
+        yield
+        f.seek(0)
+        content = f.read().decode('utf-8')
+        assert "Avg prompt throughput: " in content
     uvicorn_process.terminate()
 
 
