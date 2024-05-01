@@ -709,7 +709,7 @@ class AsyncLLMEngine:
             self,
             scheduler_outputs: Optional[SchedulerOutputs] = None,
             model_output: Optional[List[SamplerOutput]] = None) -> None:
-        if self.engine_use_ray:
+        if self.engine_use_ray and self.engine.log_stats:
             await self.engine.do_log_stats.remote(  # type: ignore
                 scheduler_outputs, model_output)
         else:
