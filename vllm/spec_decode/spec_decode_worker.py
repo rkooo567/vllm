@@ -320,7 +320,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
                                               num_cpu_blocks=num_cpu_blocks)
 
     @torch.inference_mode()
-    def _execute_model_spmd(self, execute_model_req: ExecuteModelRequest, ) -> List[SamplerOutput]:
+    def _execute_model_spmd(self, execute_model_req: ExecuteModelRequest, _: Any) -> List[SamplerOutput]:
         # NOTE(cade): Performance: this separates the API server and scheduler from rank0 process,
         # which significantly reduces variance in step time due to less gil interrupts.
         # However, currently this still invokes the NCCL control plane for the scoring model,
@@ -330,9 +330,9 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         # for performance reasons.
 
         # Workaround for other ranks not running sampler.
-        if self.rank != self._driver_rank:
-            self._run_non_driver_rank_spmd(execute_model_req.num_lookahead_slots)
-            return []
+        # if self.rank != self._driver_rank:
+        #     self._run_non_driver_rank_spmd(execute_model_req.num_lookahead_slots)
+        #     return []
 
         # TODO how to handle shutdown? need to signal to workers that we're done.
         # in non-spmd case this is None execute_model_req
@@ -346,7 +346,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
 
         self._maybe_disable_speculative_tokens(
             disable_all_speculation, execute_model_req.seq_group_metadata_list)
-
+        print(f"SANG-TODO {num_lookahead_slots=} {len(execute_model_req.seq_group_metadata_list)}")
         if num_lookahead_slots == 0 or len(
                 execute_model_req.seq_group_metadata_list
         ) == 0 or disable_all_speculation:
@@ -581,6 +581,7 @@ class SpecDecodeWorker(LoraNotSupportedWorkerBase):
         Returns a list of SamplerOutput, each containing a single token per
         sequence.
         """
+        print("SANG-TODO _run_speculative_decoding_step")
         assert num_lookahead_slots == execute_model_req.num_lookahead_slots
 
         # Pass last hidden states from target model to proposer
