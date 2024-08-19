@@ -1571,11 +1571,13 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
                     torch.tensor(model_forward_time + orig_model_forward_time))
             return hidden_or_intermediate_states
 
+        print(f"SANG-TODO model runner before compute logits")
         logits = self.model.compute_logits(hidden_or_intermediate_states,
                                            model_input.sampling_metadata)
+        print(f"SANG-TODO model runner after compute logits")
 
-        if not self.is_driver_worker:
-            return []
+        # if not self.is_driver_worker:
+        #     return []
 
         # Sample the next token.
         output: SamplerOutput = self.model.sample(

@@ -28,7 +28,6 @@
 
 steps:
 ##### fast check tests  #####
-
 - label: Documentation Build # 2min
   working_dir: "/vllm-workspace/test_docs/docs"
   fast_check: true
